@@ -82,6 +82,11 @@ public class RollbackService {
         }
         Deployment requested = deployments.findById(targetDeploymentId)
                 .orElseThrow(() -> new NotFoundException("Deployment", targetDeploymentId));
+        if (!requested.getEnvironment().getId().equals(environmentId)) {
+            throw new IllegalArgumentException(("Deployment #%d belongs to environment '%s' of application '%s', "
+                    + "not to this environment").formatted(targetDeploymentId, requested.getEnvironment().getName(),
+                            requested.getApplication().getName()));
+        }
         return candidates.stream()
                 .filter(candidate -> candidate.getId().equals(requested.getId()))
                 .findFirst()

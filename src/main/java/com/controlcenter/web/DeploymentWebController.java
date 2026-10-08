@@ -75,7 +75,7 @@ public class DeploymentWebController {
         try {
             deploymentService.updateStatus(id, status, "Marked %s manually from the dashboard".formatted(status));
             redirect.addFlashAttribute("success", "Deployment marked " + status);
-        } catch (ConflictException ex) {
+        } catch (ConflictException | IllegalArgumentException ex) {
             redirect.addFlashAttribute("error", ex.getMessage());
         }
         return "redirect:/deployments/" + id;

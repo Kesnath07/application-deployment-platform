@@ -115,6 +115,21 @@ class RollbackServiceTest {
     }
 
     @Test
+    void rejectsTargetFromAnotherEnvironment() {
+        deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        deploySuccessfully("bbbbbbbbbbbb", "2.0.0");
+        Long applicationId = environmentService.get(environmentId).getApplication().getId();
+        Long stagingId = environmentService.create(applicationId, new EnvironmentRequest("staging", null)).getId();
+        Deployment staging = deploymentService.deploy(stagingId, new DeploymentRequest("cccccccccccc", "3.0.0", null));
+        deploymentService.updateStatus(staging.getId(), DeploymentStatus.SUCCESS, null);
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, staging.getId(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("belongs to environment 'staging' of application 'orders-api'");
+        assertThat(deploymentService.findByEnvironment(environmentId)).hasSize(2);
+    }
+
+    @Test
     void rejectsRollbackWithoutHistory() {
         assertThatThrownBy(() -> rollbackService.rollback(environmentId, null, null))
                 .isInstanceOf(ConflictException.class);

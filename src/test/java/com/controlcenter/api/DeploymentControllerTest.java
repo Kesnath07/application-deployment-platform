@@ -80,6 +80,36 @@ class DeploymentControllerTest {
     }
 
     @Test
+    void returnsConflictWhenImageIsAlreadyLive() throws Exception {
+        when(deploymentService.deploy(eq(3L), any()))
+                .thenThrow(new ConflictException("Image 'abc123def456' is already live in environment 'dev'"));
+
+        mvc.perform(post("/api/environments/3/deployments").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"imageTag\": \"abc123def456\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(startsWith("Image 'abc123def456' is already live")));
+    }
+
+    @Test
+    void returnsBadRequestForStatusThatCannotBeReported() throws Exception {
+        when(deploymentService.updateStatus(10L, DeploymentStatus.ROLLED_BACK, null))
+                .thenThrow(new IllegalArgumentException("Status ROLLED_BACK cannot be reported"));
+
+        mvc.perform(post("/api/deployments/10/status").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"ROLLED_BACK\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Status ROLLED_BACK cannot be reported"));
+    }
+
+    @Test
+    void rejectsStatusCallbackWithoutStatus() throws Exception {
+        mvc.perform(post("/api/deployments/10/status").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\": \"done\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]").value(startsWith("status")));
+    }
+
+    @Test
     void rollsBackWithoutRequestBody() throws Exception {
         when(rollbackService.rollback(eq(3L), isNull(), isNull())).thenReturn(deployment(11L, "aaaaaaaaaaaa", true));
 

@@ -117,6 +117,69 @@ class DeploymentServiceTest {
     }
 
     @Test
+    void rejectsMissingOrMalformedImageTag() {
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId, new DeploymentRequest(null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required");
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId, new DeploymentRequest("  ", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("required");
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId, new DeploymentRequest("-bad tag", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("valid Docker image tag");
+        assertThat(deploymentService.findByEnvironment(environmentId)).isEmpty();
+    }
+
+    @Test
+    void rejectsRedeployingTheImageThatIsAlreadyLive() {
+        Deployment live = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        deploymentService.updateStatus(live.getId(), DeploymentStatus.SUCCESS, "service stable");
+
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.1", null)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already live in environment 'dev' (deployment #" + live.getId() + ")");
+        assertThat(deploymentService.findByEnvironment(environmentId)).hasSize(1);
+        assertThat(environmentService.get(environmentId).getStatus()).isEqualTo(EnvironmentStatus.ACTIVE);
+    }
+
+    @Test
+    void allowsRedeployingAnImageThatIsNoLongerLive() {
+        Deployment first = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        deploymentService.updateStatus(first.getId(), DeploymentStatus.SUCCESS, null);
+        Deployment second = deploymentService.deploy(environmentId, new DeploymentRequest("bbbbbbbbbbbb", "2.0.0", null));
+        deploymentService.updateStatus(second.getId(), DeploymentStatus.SUCCESS, null);
+
+        Deployment again = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+
+        assertThat(again.getStatus()).isEqualTo(DeploymentStatus.RUNNING);
+    }
+
+    @Test
+    void allowsRetryingAnImageWhoseDeploymentFailed() {
+        Deployment failed = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        deploymentService.updateStatus(failed.getId(), DeploymentStatus.FAILED, "tasks failed to start");
+
+        Deployment retry = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+
+        assertThat(retry.getId()).isNotEqualTo(failed.getId());
+        assertThat(retry.getStatus()).isEqualTo(DeploymentStatus.RUNNING);
+    }
+
+    @Test
+    void rejectsStatusesThatCannotBeReported() {
+        Deployment deployment = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        deploymentService.updateStatus(deployment.getId(), DeploymentStatus.SUCCESS, null);
+
+        assertThatThrownBy(() -> deploymentService.updateStatus(deployment.getId(), DeploymentStatus.ROLLED_BACK, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ROLLED_BACK is set automatically");
+        assertThatThrownBy(() -> deploymentService.updateStatus(deployment.getId(), DeploymentStatus.PENDING, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(deploymentService.get(deployment.getId()).getStatus()).isEqualTo(DeploymentStatus.SUCCESS);
+        assertThat(environmentService.get(environmentId).getCurrentVersion()).isEqualTo("1.0.0");
+    }
+
+    @Test
     void rejectsInvalidStatusTransition() {
         Deployment deployment = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
         deploymentService.updateStatus(deployment.getId(), DeploymentStatus.FAILED, "tasks failed to start");

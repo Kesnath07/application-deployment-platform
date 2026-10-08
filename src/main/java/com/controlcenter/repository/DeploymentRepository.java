@@ -31,6 +31,9 @@ public interface DeploymentRepository extends JpaRepository<Deployment, Long> {
     List<Deployment> findByEnvironmentIdAndStatusOrderByCompletedAtDescIdDesc(Long environmentId,
                                                                            DeploymentStatus status);
 
+    Optional<Deployment> findFirstByEnvironmentIdAndStatusOrderByCompletedAtDescIdDesc(Long environmentId,
+                                                                                    DeploymentStatus status);
+
     boolean existsByEnvironmentIdAndStatusIn(Long environmentId, Collection<DeploymentStatus> statuses);
 
     long countByStatus(DeploymentStatus status);

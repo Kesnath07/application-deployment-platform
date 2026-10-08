@@ -58,7 +58,7 @@ public class EnvironmentWebController {
             redirect.addFlashAttribute("success", "Rollback to %s started as deployment #%d"
                     .formatted(rollback.getVersion(), rollback.getId()));
             return "redirect:/deployments/" + rollback.getId();
-        } catch (ConflictException ex) {
+        } catch (ConflictException | IllegalArgumentException ex) {
             redirect.addFlashAttribute("error", ex.getMessage());
             return "redirect:/environments/" + id;
         }
