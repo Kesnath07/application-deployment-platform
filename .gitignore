@@ -41,3 +41,6 @@ override.tf.json
 backend.hcl
 .terraformrc
 terraform.rc
+
+# Provider lock files are committed for root modules (environments) only
+infra/terraform/modules/**/.terraform.lock.hcl

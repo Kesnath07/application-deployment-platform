@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (git-ignored) and adjust.
+aws_region        = "eu-central-1"
+github_repository = "your-github-user/cloud-deployment-control-center"
+
+# Restrict access to the internal dashboard, e.g. office or VPN egress ranges.
+alb_ingress_cidrs = ["0.0.0.0/0"]
