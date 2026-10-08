@@ -1,0 +1,90 @@
+name: CI
+
+# Pull request validation for the application: unit/integration tests, packaging,
+# Dockerfile lint, image build and an end-to-end container smoke test.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Java tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run tests and package
+        run: ./mvnw -B -ntp verify
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
+
+  docker:
+    name: Docker build and smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.5.0
+        with:
+          dockerfile: Dockerfile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: cloud-deployment-control-center:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start application with PostgreSQL
+        run: |
+          cp .env.example .env
+          docker compose up -d --no-build --wait --wait-timeout 180
+
+      - name: Smoke test API
+        run: |
+          curl -fsS http://127.0.0.1:8080/api/health | tee /dev/stderr | grep -q '"status":"UP"'
+          curl -fsS -X POST http://127.0.0.1:8080/api/applications \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"smoke-test","repositoryUrl":"https://github.com/example/smoke-test"}'
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'Dashboard'
+
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v
