@@ -1,0 +1,13 @@
+# Tests run against an in-memory H2 database in PostgreSQL compatibility mode so the
+# suite needs no external services. Flyway applies the same migrations used in AWS.
+spring:
+  datasource:
+    url: jdbc:h2:mem:controlcenter;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  thymeleaf:
+    cache: false
+
+control-center:
+  version: test
+  environment: test

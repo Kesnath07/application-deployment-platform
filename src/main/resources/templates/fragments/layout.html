@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:fragment="head(title)">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title} + ' · Control Center'">Control Center</title>
+  <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<header th:fragment="nav(active)" class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" th:href="@{/}">
+      <span class="brand-mark">&#9650;</span> Cloud Deployment Control Center
+    </a>
+    <nav>
+      <a th:href="@{/}" th:classappend="${active == 'dashboard'} ? 'active'">Dashboard</a>
+      <a th:href="@{/applications}" th:classappend="${active == 'applications'} ? 'active'">Applications</a>
+      <a th:href="@{/deployments}" th:classappend="${active == 'deployments'} ? 'active'">Deployments</a>
+    </nav>
+  </div>
+</header>
+
+<div th:fragment="flash">
+  <div th:if="${success}" class="flash flash-success" th:text="${success}"></div>
+  <div th:if="${error}" class="flash flash-error" th:text="${error}"></div>
+</div>
+
+<footer th:fragment="footer" class="footer">
+  Cloud Deployment Control Center · Java 21 · Spring Boot · AWS ECS Fargate
+</footer>
+
+</body>
+</html>
