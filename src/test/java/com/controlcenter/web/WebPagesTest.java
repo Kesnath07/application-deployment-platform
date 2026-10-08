@@ -86,6 +86,58 @@ class WebPagesTest {
     }
 
     @Test
+    void showsOperationalStateAndLastDeploymentOnDashboard() throws Exception {
+        mvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Last deployment")))
+                .andExpect(content().string(containsString(">UNVERIFIED<")))
+                .andExpect(content().string(containsString("#" + deploymentId)));
+    }
+
+    @Test
+    void highlightsFailedDeploymentOnEnvironmentAndDashboard() throws Exception {
+        Deployment failed = deploymentService.deploy(environmentId, new DeploymentRequest("cccccccccccc", "3.0.0", null));
+        deploymentService.updateStatus(failed.getId(), DeploymentStatus.FAILED, "ECS service did not stabilize");
+
+        mvc.perform(get("/environments/" + environmentId))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(">DEGRADED<")))
+                .andExpect(content().string(containsString("failed</strong>")))
+                .andExpect(content().string(containsString("ECS service did not stabilize")))
+                .andExpect(content().string(containsString("is still serving traffic")));
+        mvc.perform(get("/"))
+                .andExpect(content().string(containsString("1</span> need attention")));
+        mvc.perform(get("/applications/" + applicationId))
+                .andExpect(content().string(containsString(">DEGRADED<")));
+        mvc.perform(get("/deployments/" + failed.getId()))
+                .andExpect(content().string(containsString("This deployment failed")))
+                .andExpect(content().string(containsString("ECS service did not stabilize")));
+    }
+
+    @Test
+    void showsInProgressDeploymentOnEnvironmentPage() throws Exception {
+        Deployment running = deploymentService.deploy(environmentId, new DeploymentRequest("cccccccccccc", "3.0.0", null));
+
+        mvc.perform(get("/environments/" + environmentId))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(">DEPLOYING<")))
+                .andExpect(content().string(containsString("blocked until it finishes")));
+        mvc.perform(get("/deployments/" + running.getId()))
+                .andExpect(content().string(containsString("Waiting for the pipeline to start")));
+    }
+
+    @Test
+    void marksOnlyTheLiveDeploymentAsLive() throws Exception {
+        Long previousId = deploymentService.findByEnvironment(environmentId).getLast().getId();
+
+        mvc.perform(get("/deployments/" + deploymentId))
+                .andExpect(model().attribute("live", true))
+                .andExpect(content().string(containsString("currently serving traffic")));
+        mvc.perform(get("/deployments/" + previousId))
+                .andExpect(model().attribute("live", false));
+    }
+
+    @Test
     void rendersDeploymentHistoryAndDetail() throws Exception {
         mvc.perform(get("/deployments").param("status", "SUCCESS")).andExpect(status().isOk())
                 .andExpect(content().string(containsString("2.0.0")));

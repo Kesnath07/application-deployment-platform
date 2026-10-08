@@ -13,15 +13,44 @@
   <div class="page-header">
     <div>
       <h1><span th:text="${environment.application.name}">app</span> · <span th:text="${environment.name}">env</span></h1>
+      <span th:replace="~{fragments/status :: state(${overview})}"></span>
       <span class="badge" th:classappend="'badge-' + ${environment.status}" th:text="${environment.status}">ACTIVE</span>
       <span class="badge" th:classappend="'badge-' + ${environment.healthStatus}" th:text="${environment.healthStatus}">HEALTHY</span>
     </div>
+  </div>
+
+  <div class="callout callout-danger" th:if="${overview.state.name() == 'DOWN'}">
+    <strong>Health check failing.</strong>
+    The last probe of <span class="mono" th:text="${environment.url}">url</span> at
+    <span th:text="${@fmt.time(environment.lastHealthCheckAt)}">time</span> did not return a successful response.
+  </div>
+  <div class="callout callout-danger" th:if="${overview.latestDeployment != null and overview.latestDeployment.status.name() == 'FAILED'}"
+       th:with="failed=${overview.latestDeployment}">
+    <strong>Deployment <a th:href="@{/deployments/{id}(id=${failed.id})}" th:text="'#' + ${failed.id}">#1</a>
+      of <span class="mono" th:text="${failed.version}">v1</span> failed</strong>
+    at <span th:text="${@fmt.time(failed.completedAt)}">time</span>.
+    <span th:if="${environment.currentVersion}">Version <span class="mono" th:text="${environment.currentVersion}">v0</span>
+      is still serving traffic.</span>
+    <span th:unless="${environment.currentVersion}">No version is live in this environment.</span>
+    <span class="callout-detail mono" th:if="${overview.failureReason}" th:text="${overview.failureReason}">reason</span>
+  </div>
+  <div class="callout callout-info" th:if="${overview.deploymentInProgress}" th:with="active=${overview.latestDeployment}">
+    <strong>Deployment <a th:href="@{/deployments/{id}(id=${active.id})}" th:text="'#' + ${active.id}">#1</a>
+      of <span class="mono" th:text="${active.version}">v1</span> is
+      <span th:text="${active.status}">RUNNING</span></strong>
+    (created <span th:text="${@fmt.time(active.createdAt)}">time</span>).
+    New deployments and rollbacks are blocked until it finishes.
   </div>
 
   <div class="grid grid-2">
     <div class="card">
       <h2>Status</h2>
       <dl class="details">
+        <dt>Operational state</dt>
+        <dd>
+          <span th:replace="~{fragments/status :: state(${overview})}"></span>
+          <span class="hint" th:text="${overview.state.description}">description</span>
+        </dd>
         <dt>Current version</dt>
         <dd class="mono" th:text="${environment.currentVersion} ?: 'Not deployed'">v1</dd>
         <dt>Live image</dt>
@@ -30,6 +59,10 @@
              th:text="${currentDeployment.imageTag}">sha</a>
           <span th:unless="${currentDeployment}">—</span>
         </dd>
+        <dt>Live since</dt>
+        <dd th:text="${overview.liveDeployment} ? ${@fmt.time(overview.liveDeployment.completedAt)} : '—'">time</dd>
+        <dt>Last deployment</dt>
+        <dd><span th:replace="~{fragments/status :: deployment(${overview.latestDeployment})}"></span></dd>
         <dt>Deployment status</dt>
         <dd th:text="${environment.status}">ACTIVE</dd>
         <dt>Health</dt>

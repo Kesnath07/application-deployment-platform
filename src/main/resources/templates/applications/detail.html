@@ -47,14 +47,15 @@
     <p th:if="${#lists.isEmpty(environments)}" class="muted">No environments yet. Create <code>dev</code> and <code>prod</code> to start deploying.</p>
     <table th:unless="${#lists.isEmpty(environments)}">
       <thead>
-      <tr><th>Environment</th><th>Status</th><th>Health</th><th>Current version</th><th>URL</th></tr>
+      <tr><th>Environment</th><th>State</th><th>Health</th><th>Current version</th><th>Last deployment</th><th>URL</th></tr>
       </thead>
       <tbody>
-      <tr th:each="env : ${environments}">
+      <tr th:each="overview : ${environments}" th:with="env=${overview.environment}">
         <td><a th:href="@{/environments/{id}(id=${env.id})}" th:text="${env.name}">dev</a></td>
-        <td><span class="badge" th:classappend="'badge-' + ${env.status}" th:text="${env.status}">ACTIVE</span></td>
+        <td><span th:replace="~{fragments/status :: state(${overview})}"></span></td>
         <td><span class="badge" th:classappend="'badge-' + ${env.healthStatus}" th:text="${env.healthStatus}">HEALTHY</span></td>
         <td class="mono" th:text="${env.currentVersion} ?: '—'">v1</td>
+        <td><span th:replace="~{fragments/status :: deployment(${overview.latestDeployment})}"></span></td>
         <td class="mono" th:text="${env.url} ?: '—'">url</td>
       </tr>
       </tbody>

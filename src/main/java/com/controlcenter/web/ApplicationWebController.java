@@ -5,6 +5,7 @@ import com.controlcenter.domain.Application;
 import com.controlcenter.domain.Environment;
 import com.controlcenter.service.ApplicationService;
 import com.controlcenter.service.DeploymentService;
+import com.controlcenter.service.EnvironmentOverviewService;
 import com.controlcenter.service.EnvironmentService;
 import com.controlcenter.web.form.ApplicationForm;
 import com.controlcenter.web.form.EnvironmentForm;
@@ -31,12 +32,14 @@ public class ApplicationWebController {
     private final ApplicationService applicationService;
     private final EnvironmentService environmentService;
     private final DeploymentService deploymentService;
+    private final EnvironmentOverviewService overviewService;
 
     public ApplicationWebController(ApplicationService applicationService, EnvironmentService environmentService,
-                                    DeploymentService deploymentService) {
+                                    DeploymentService deploymentService, EnvironmentOverviewService overviewService) {
         this.applicationService = applicationService;
         this.environmentService = environmentService;
         this.deploymentService = deploymentService;
+        this.overviewService = overviewService;
     }
 
     @GetMapping
@@ -73,7 +76,7 @@ public class ApplicationWebController {
     @GetMapping("/{id}")
     public String detail(@PathVariable Long id, Model model) {
         model.addAttribute("app", applicationService.get(id));
-        model.addAttribute("environments", environmentService.findByApplication(id));
+        model.addAttribute("environments", overviewService.forApplication(id));
         model.addAttribute("environmentForm", new EnvironmentForm());
         model.addAttribute("recentDeployments", deploymentService.findRecentByApplication(id, RECENT_DEPLOYMENTS));
         return "applications/detail";

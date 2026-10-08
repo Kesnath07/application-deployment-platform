@@ -23,6 +23,8 @@
       <div class="value" th:text="${summary.environmentCount}">0</div>
       <div class="muted"><span th:text="${summary.activeEnvironmentCount}">0</span> active ·
         <span th:text="${summary.unhealthyEnvironmentCount}">0</span> unhealthy</div>
+      <div th:if="${summary.attentionEnvironmentCount > 0}" class="text-danger">
+        <span th:text="${summary.attentionEnvironmentCount}">0</span> need attention</div>
     </div>
     <div class="stat">
       <div class="label">Deployments</div>
@@ -43,14 +45,15 @@
     </p>
     <table th:unless="${#lists.isEmpty(summary.environments)}">
       <thead>
-      <tr><th>Application</th><th>Environment</th><th>Current version</th><th>Status</th><th>Health</th><th>Last check</th></tr>
+      <tr><th>Application</th><th>Environment</th><th>State</th><th>Current version</th><th>Last deployment</th><th>Health</th><th>Last check</th></tr>
       </thead>
       <tbody>
-      <tr th:each="env : ${summary.environments}">
+      <tr th:each="overview : ${summary.environments}" th:with="env=${overview.environment}">
         <td><a th:href="@{/applications/{id}(id=${env.application.id})}" th:text="${env.application.name}">app</a></td>
         <td><a th:href="@{/environments/{id}(id=${env.id})}" th:text="${env.name}">dev</a></td>
+        <td><span th:replace="~{fragments/status :: state(${overview})}"></span></td>
         <td class="mono" th:text="${env.currentVersion} ?: '—'">v1</td>
-        <td><span class="badge" th:classappend="'badge-' + ${env.status}" th:text="${env.status}">ACTIVE</span></td>
+        <td><span th:replace="~{fragments/status :: deployment(${overview.latestDeployment})}"></span></td>
         <td><span class="badge" th:classappend="'badge-' + ${env.healthStatus}" th:text="${env.healthStatus}">HEALTHY</span></td>
         <td th:text="${@fmt.time(env.lastHealthCheckAt)}">time</td>
       </tr>

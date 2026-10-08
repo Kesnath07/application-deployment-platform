@@ -109,6 +109,11 @@ public class Deployment {
         return DeploymentStatus.IN_PROGRESS.contains(status);
     }
 
+    /** The most recent entry of the message log, e.g. the pipeline's explanation of a failure. */
+    public String getLatestNote() {
+        return message == null ? null : message.substring(message.lastIndexOf('\n') + 1);
+    }
+
     public Long getId() {
         return id;
     }

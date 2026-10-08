@@ -78,6 +78,15 @@ public class DeploymentService {
         return deployments.findByEnvironmentIdOrderByCreatedAtDescIdDesc(environmentId);
     }
 
+    /** Whether the deployment is the successful one currently serving traffic in its environment. */
+    public boolean isLive(Deployment deployment) {
+        return deployment.getStatus() == DeploymentStatus.SUCCESS
+                && deployments.findFirstByEnvironmentIdAndStatusOrderByCompletedAtDescIdDesc(
+                        deployment.getEnvironment().getId(), DeploymentStatus.SUCCESS)
+                .map(live -> live.getId().equals(deployment.getId()))
+                .orElse(false);
+    }
+
     /** Records a new deployment and triggers the deployment workflow. */
     public Deployment deploy(Long environmentId, DeploymentRequest request) {
         String imageTag = requireValidImageTag(request.imageTag());

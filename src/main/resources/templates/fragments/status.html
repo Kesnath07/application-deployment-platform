@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- Operational state badge of an EnvironmentOverview; the tooltip explains the state. -->
+<span th:fragment="state(overview)" class="badge" th:classappend="'badge-' + ${overview.state}"
+      th:text="${overview.state}" th:title="${overview.state.description}">HEALTHY</span>
+
+<!-- Compact summary of a deployment (nullable) for environment tables. -->
+<span th:fragment="deployment(d)">
+  <th:block th:if="${d}">
+    <a th:href="@{/deployments/{id}(id=${d.id})}" th:text="'#' + ${d.id}">#1</a>
+    <span class="mono" th:text="${d.version}">v1</span>
+    <span class="badge" th:classappend="'badge-' + ${d.status}" th:text="${d.status}">SUCCESS</span>
+    <span class="hint nowrap" th:text="${@fmt.time(d.createdAt)}">time</span>
+  </th:block>
+  <span th:unless="${d}" class="muted">—</span>
+</span>
+</body>
+</html>

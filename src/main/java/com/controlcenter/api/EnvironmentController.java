@@ -2,8 +2,10 @@ package com.controlcenter.api;
 
 import com.controlcenter.api.dto.EnvironmentRequest;
 import com.controlcenter.api.dto.EnvironmentResponse;
+import com.controlcenter.api.dto.EnvironmentStatusResponse;
 import com.controlcenter.api.dto.EnvironmentUpdateRequest;
 import com.controlcenter.service.EnvironmentHealthChecker;
+import com.controlcenter.service.EnvironmentOverviewService;
 import com.controlcenter.service.EnvironmentService;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -21,10 +23,13 @@ public class EnvironmentController {
 
     private final EnvironmentService environmentService;
     private final EnvironmentHealthChecker healthChecker;
+    private final EnvironmentOverviewService overviewService;
 
-    public EnvironmentController(EnvironmentService environmentService, EnvironmentHealthChecker healthChecker) {
+    public EnvironmentController(EnvironmentService environmentService, EnvironmentHealthChecker healthChecker,
+                                 EnvironmentOverviewService overviewService) {
         this.environmentService = environmentService;
         this.healthChecker = healthChecker;
+        this.overviewService = overviewService;
     }
 
     @GetMapping("/api/applications/{applicationId}/environments")
@@ -37,6 +42,12 @@ public class EnvironmentController {
                                                       @Valid @RequestBody EnvironmentRequest request) {
         EnvironmentResponse created = EnvironmentResponse.from(environmentService.create(applicationId, request));
         return ResponseEntity.created(URI.create("/api/environments/" + created.id())).body(created);
+    }
+
+    /** Operational status of every environment of an application. */
+    @GetMapping("/api/applications/{applicationId}/status")
+    public List<EnvironmentStatusResponse> applicationStatus(@PathVariable Long applicationId) {
+        return overviewService.forApplication(applicationId).stream().map(EnvironmentStatusResponse::from).toList();
     }
 
     @GetMapping("/api/environments")
@@ -52,6 +63,12 @@ public class EnvironmentController {
     @PatchMapping("/api/environments/{id}")
     public EnvironmentResponse update(@PathVariable Long id, @Valid @RequestBody EnvironmentUpdateRequest request) {
         return EnvironmentResponse.from(environmentService.updateUrl(id, request.url()));
+    }
+
+    /** Operational state, health and latest/live deployment of an environment. */
+    @GetMapping("/api/environments/{id}/status")
+    public EnvironmentStatusResponse status(@PathVariable Long id) {
+        return EnvironmentStatusResponse.from(overviewService.forEnvironment(id));
     }
 
     /** Runs an on-demand health probe and returns the refreshed environment. */

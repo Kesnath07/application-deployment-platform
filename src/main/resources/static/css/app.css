@@ -69,11 +69,20 @@ tr:last-child td { border-bottom: none; }
 
 /* Badges */
 .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; background: var(--neutral-bg); color: var(--muted); }
-.badge-SUCCESS, .badge-ACTIVE, .badge-HEALTHY { background: var(--success-bg); color: var(--success); }
+.badge-SUCCESS, .badge-ACTIVE, .badge-HEALTHY, .badge-LIVE { background: var(--success-bg); color: var(--success); }
 .badge-RUNNING, .badge-DEPLOYING { background: var(--info-bg); color: var(--info); }
-.badge-PENDING, .badge-UNKNOWN, .badge-NOT_DEPLOYED { background: var(--neutral-bg); color: var(--muted); }
-.badge-FAILED, .badge-UNHEALTHY { background: var(--danger-bg); color: var(--danger); }
-.badge-ROLLED_BACK { background: var(--warning-bg); color: var(--warning); }
+.badge-PENDING, .badge-UNKNOWN, .badge-NOT_DEPLOYED, .badge-UNVERIFIED { background: var(--neutral-bg); color: var(--muted); }
+.badge-FAILED, .badge-UNHEALTHY, .badge-DOWN { background: var(--danger-bg); color: var(--danger); }
+.badge-ROLLED_BACK, .badge-DEGRADED { background: var(--warning-bg); color: var(--warning); }
+
+/* Callouts for failures and in-progress work */
+.callout { padding: 0.75rem 1rem; border-radius: var(--radius); border-left: 4px solid; margin-bottom: 1.25rem; }
+.callout-danger { background: var(--danger-bg); border-color: var(--danger); }
+.callout-info { background: var(--info-bg); border-color: var(--info); }
+.callout-success { background: var(--success-bg); border-color: var(--success); }
+.callout-detail { display: block; margin-top: 0.35rem; overflow-wrap: anywhere; }
+.text-danger { color: var(--danger); font-weight: 600; }
+.nowrap { white-space: nowrap; }
 
 /* Forms and buttons */
 form.stacked label { display: block; font-weight: 500; margin: 0.75rem 0 0.25rem; }

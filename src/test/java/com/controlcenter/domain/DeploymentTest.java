@@ -68,6 +68,17 @@ class DeploymentTest {
     }
 
     @Test
+    void exposesTheLatestMessageAsNote() {
+        Deployment deployment = new Deployment(environment, "1.0.0", "abc123", false, null);
+        assertThat(deployment.getLatestNote()).isNull();
+
+        deployment.transitionTo(DeploymentStatus.RUNNING, "workflow dispatched", T1);
+        deployment.transitionTo(DeploymentStatus.FAILED, "tasks failed to start", T2);
+
+        assertThat(deployment.getLatestNote()).isEqualTo("tasks failed to start");
+    }
+
+    @Test
     void failedDeploymentKeepsEnvironmentActiveWhenAVersionIsLive() {
         environment.deploymentSucceeded("1.0.0");
         environment.deploymentStarted();

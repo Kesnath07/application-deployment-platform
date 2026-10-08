@@ -15,6 +15,9 @@ public interface EnvironmentRepository extends JpaRepository<Environment, Long> 
     List<Environment> findByApplicationIdOrderByNameAsc(Long applicationId);
 
     @EntityGraph(attributePaths = "application")
+    List<Environment> findWithApplicationByApplicationIdOrderByNameAsc(Long applicationId);
+
+    @EntityGraph(attributePaths = "application")
     List<Environment> findAllByOrderByApplicationNameAscNameAsc();
 
     List<Environment> findByUrlIsNotNull();

@@ -2,7 +2,6 @@ package com.controlcenter.service;
 
 import com.controlcenter.domain.Deployment;
 import com.controlcenter.domain.DeploymentStatus;
-import com.controlcenter.domain.Environment;
 import com.controlcenter.domain.EnvironmentStatus;
 import com.controlcenter.domain.HealthStatus;
 import com.controlcenter.repository.ApplicationRepository;
@@ -22,16 +21,18 @@ public class DashboardService {
     private final ApplicationRepository applications;
     private final EnvironmentRepository environments;
     private final DeploymentRepository deployments;
+    private final EnvironmentOverviewService overviews;
 
     public DashboardService(ApplicationRepository applications, EnvironmentRepository environments,
-                            DeploymentRepository deployments) {
+                            DeploymentRepository deployments, EnvironmentOverviewService overviews) {
         this.applications = applications;
         this.environments = environments;
         this.deployments = deployments;
+        this.overviews = overviews;
     }
 
     public DashboardSummary summary() {
-        List<Environment> allEnvironments = environments.findAllByOrderByApplicationNameAscNameAsc();
+        List<EnvironmentOverview> allEnvironments = overviews.all();
         long successful = deployments.countByStatus(DeploymentStatus.SUCCESS)
                 + deployments.countByStatus(DeploymentStatus.ROLLED_BACK);
         long failed = deployments.countByStatus(DeploymentStatus.FAILED);
@@ -40,22 +41,24 @@ public class DashboardService {
         long finished = successful + failed;
         Integer successRate = finished == 0 ? null : (int) Math.round(successful * 100.0 / finished);
         long unhealthy = allEnvironments.stream()
-                .filter(environment -> environment.getHealthStatus() == HealthStatus.UNHEALTHY).count();
+                .filter(overview -> overview.environment().getHealthStatus() == HealthStatus.UNHEALTHY).count();
+        long needsAttention = allEnvironments.stream().filter(overview -> overview.state().needsAttention()).count();
         List<Deployment> recent = deployments
                 .findAllByOrderByCreatedAtDescIdDesc(PageRequest.of(0, RECENT_DEPLOYMENTS)).getContent();
 
         return new DashboardSummary(applications.count(), allEnvironments.size(),
-                environments.countByStatus(EnvironmentStatus.ACTIVE), unhealthy, deployments.count(),
+                environments.countByStatus(EnvironmentStatus.ACTIVE), unhealthy, needsAttention, deployments.count(),
                 inProgress, failed, successRate, allEnvironments, recent);
     }
 
     /**
      * @param successRate percentage of finished deployments that succeeded (rolled-back
      *                    deployments count as successful rollouts); null when none finished yet
+     * @param attentionEnvironmentCount environments that are failed, down or degraded
      */
     public record DashboardSummary(long applicationCount, long environmentCount, long activeEnvironmentCount,
-                                   long unhealthyEnvironmentCount, long deploymentCount, long inProgressCount,
-                                   long failedCount, Integer successRate, List<Environment> environments,
-                                   List<Deployment> recentDeployments) {
+                                   long unhealthyEnvironmentCount, long attentionEnvironmentCount,
+                                   long deploymentCount, long inProgressCount, long failedCount, Integer successRate,
+                                   List<EnvironmentOverview> environments, List<Deployment> recentDeployments) {
     }
 }

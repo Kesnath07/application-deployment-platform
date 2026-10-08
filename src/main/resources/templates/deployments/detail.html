@@ -15,7 +15,28 @@
       <h1 th:text="'Deployment #' + ${deployment.id}">Deployment</h1>
       <span class="badge" th:classappend="'badge-' + ${deployment.status}" th:text="${deployment.status}">SUCCESS</span>
       <span th:if="${deployment.rollback}" class="badge badge-ROLLED_BACK">rollback</span>
+      <span th:if="${live}" class="badge badge-LIVE" title="Currently serving traffic">live</span>
     </div>
+  </div>
+
+  <div class="callout callout-danger" th:if="${deployment.status.name() == 'FAILED'}">
+    <strong>This deployment failed</strong> at <span th:text="${@fmt.time(deployment.completedAt)}">time</span>.
+    <span th:if="${deployment.environment.currentVersion}">
+      <span th:text="${deployment.environment.name}">env</span> is currently serving version
+      <span class="mono" th:text="${deployment.environment.currentVersion}">v0</span>.</span>
+    <span class="callout-detail mono" th:if="${deployment.latestNote}" th:text="${deployment.latestNote}">reason</span>
+  </div>
+  <div class="callout callout-info" th:if="${deployment.status.name() == 'RUNNING'}">
+    <strong>Rollout in progress</strong> since <span th:text="${@fmt.time(deployment.startedAt)}">time</span>.
+    The pipeline reports SUCCESS once the ECS service is stable and the health check passes.
+  </div>
+  <div class="callout callout-info" th:if="${deployment.status.name() == 'PENDING'}">
+    <strong>Waiting for the pipeline to start.</strong>
+    When the GitHub integration is disabled, run the workflow and report the result below.
+  </div>
+  <div class="callout callout-success" th:if="${live}">
+    <strong>Live.</strong> This deployment is currently serving traffic in
+    <a th:href="@{/environments/{id}(id=${deployment.environment.id})}" th:text="${deployment.environment.name}">env</a>.
   </div>
 
   <div class="grid grid-2">

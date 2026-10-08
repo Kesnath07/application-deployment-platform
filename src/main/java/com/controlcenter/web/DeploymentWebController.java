@@ -62,6 +62,7 @@ public class DeploymentWebController {
     public String detail(@PathVariable Long id, Model model) {
         Deployment deployment = deploymentService.get(id);
         model.addAttribute("deployment", deployment);
+        model.addAttribute("live", deploymentService.isLive(deployment));
         model.addAttribute("nextStatuses", Arrays.stream(DeploymentStatus.values())
                 .filter(status -> status != DeploymentStatus.ROLLED_BACK && deployment.getStatus().canTransitionTo(status))
                 .toList());

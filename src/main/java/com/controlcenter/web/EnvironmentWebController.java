@@ -7,6 +7,8 @@ import com.controlcenter.domain.Environment;
 import com.controlcenter.domain.HealthStatus;
 import com.controlcenter.service.DeploymentService;
 import com.controlcenter.service.EnvironmentHealthChecker;
+import com.controlcenter.service.EnvironmentOverview;
+import com.controlcenter.service.EnvironmentOverviewService;
 import com.controlcenter.service.EnvironmentService;
 import com.controlcenter.service.RollbackService;
 import com.controlcenter.web.form.DeploymentForm;
@@ -29,18 +31,23 @@ public class EnvironmentWebController {
     private final EnvironmentHealthChecker healthChecker;
     private final DeploymentService deploymentService;
     private final RollbackService rollbackService;
+    private final EnvironmentOverviewService overviewService;
 
     public EnvironmentWebController(EnvironmentService environmentService, EnvironmentHealthChecker healthChecker,
-                                    DeploymentService deploymentService, RollbackService rollbackService) {
+                                    DeploymentService deploymentService, RollbackService rollbackService,
+                                    EnvironmentOverviewService overviewService) {
         this.environmentService = environmentService;
         this.healthChecker = healthChecker;
         this.deploymentService = deploymentService;
         this.rollbackService = rollbackService;
+        this.overviewService = overviewService;
     }
 
     @GetMapping("/{id}")
     public String detail(@PathVariable Long id, Model model) {
-        model.addAttribute("environment", environmentService.get(id));
+        EnvironmentOverview overview = overviewService.forEnvironment(id);
+        model.addAttribute("overview", overview);
+        model.addAttribute("environment", overview.environment());
         model.addAttribute("deployments", deploymentService.findByEnvironment(id));
         model.addAttribute("deploymentForm", new DeploymentForm());
         List<Deployment> candidates = rollbackService.rollbackCandidates(id);
