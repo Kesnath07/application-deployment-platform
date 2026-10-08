@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
-<!-- Reusable deployment history table. showTarget=true adds application/environment columns. -->
-<div th:fragment="table(deployments, showTarget)" class="table-wrap">
+<!-- Reusable deployment history table. showTarget=true adds application/environment columns;
+     rollbackIds (nullable) lists deployments that can be restored with a rollback action. -->
+<div th:fragment="table(deployments, showTarget, rollbackIds)" class="table-wrap">
   <p th:if="${#lists.isEmpty(deployments)}" class="muted">No deployments yet.</p>
   <table th:unless="${#lists.isEmpty(deployments)}">
     <thead>
@@ -15,6 +16,7 @@
       <th>Status</th>
       <th>Created</th>
       <th>Duration</th>
+      <th th:if="${rollbackIds != null}"></th>
     </tr>
     </thead>
     <tbody>
@@ -34,6 +36,14 @@
       <td><span class="badge" th:classappend="'badge-' + ${d.status}" th:text="${d.status}">SUCCESS</span></td>
       <td th:text="${@fmt.time(d.createdAt)}">time</td>
       <td th:text="${@fmt.duration(d.startedAt, d.completedAt)}">1m</td>
+      <td th:if="${rollbackIds != null}">
+        <form th:if="${rollbackIds.contains(d.id)}" class="inline-form" method="post"
+              th:action="@{/environments/{id}/rollback(id=${d.environment.id})}"
+              th:attr="onsubmit=|return confirm('Roll back to ${d.version}?')|">
+          <input type="hidden" name="targetDeploymentId" th:value="${d.id}">
+          <button type="submit" class="btn btn-sm btn-warning">Roll back to this</button>
+        </form>
+      </td>
     </tr>
     </tbody>
   </table>

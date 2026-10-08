@@ -1,12 +1,17 @@
 package com.controlcenter.web;
 
 import com.controlcenter.api.dto.ValidationPatterns;
+import com.controlcenter.common.ConflictException;
+import com.controlcenter.domain.Deployment;
 import com.controlcenter.domain.Environment;
 import com.controlcenter.domain.HealthStatus;
 import com.controlcenter.service.DeploymentService;
 import com.controlcenter.service.EnvironmentHealthChecker;
 import com.controlcenter.service.EnvironmentService;
+import com.controlcenter.service.RollbackService;
 import com.controlcenter.web.form.DeploymentForm;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,12 +28,14 @@ public class EnvironmentWebController {
     private final EnvironmentService environmentService;
     private final EnvironmentHealthChecker healthChecker;
     private final DeploymentService deploymentService;
+    private final RollbackService rollbackService;
 
     public EnvironmentWebController(EnvironmentService environmentService, EnvironmentHealthChecker healthChecker,
-                                    DeploymentService deploymentService) {
+                                    DeploymentService deploymentService, RollbackService rollbackService) {
         this.environmentService = environmentService;
         this.healthChecker = healthChecker;
         this.deploymentService = deploymentService;
+        this.rollbackService = rollbackService;
     }
 
     @GetMapping("/{id}")
@@ -36,7 +43,25 @@ public class EnvironmentWebController {
         model.addAttribute("environment", environmentService.get(id));
         model.addAttribute("deployments", deploymentService.findByEnvironment(id));
         model.addAttribute("deploymentForm", new DeploymentForm());
+        List<Deployment> candidates = rollbackService.rollbackCandidates(id);
+        model.addAttribute("currentDeployment", rollbackService.currentDeployment(id).orElse(null));
+        model.addAttribute("rollbackTarget", candidates.isEmpty() ? null : candidates.getFirst());
+        model.addAttribute("rollbackCandidateIds", candidates.stream().map(Deployment::getId).collect(Collectors.toSet()));
         return "environments/detail";
+    }
+
+    @PostMapping("/{id}/rollback")
+    public String rollback(@PathVariable Long id, @RequestParam(required = false) Long targetDeploymentId,
+                           RedirectAttributes redirect) {
+        try {
+            Deployment rollback = rollbackService.rollback(id, targetDeploymentId, null);
+            redirect.addFlashAttribute("success", "Rollback to %s started as deployment #%d"
+                    .formatted(rollback.getVersion(), rollback.getId()));
+            return "redirect:/deployments/" + rollback.getId();
+        } catch (ConflictException ex) {
+            redirect.addFlashAttribute("error", ex.getMessage());
+            return "redirect:/environments/" + id;
+        }
     }
 
     @PostMapping("/{id}/url")

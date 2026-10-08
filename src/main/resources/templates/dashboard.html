@@ -4,8 +4,67 @@
 <body>
 <header th:replace="~{fragments/layout :: nav('dashboard')}"></header>
 <main class="container">
-  <h1>Dashboard</h1>
-  <p class="muted">The control plane is running. Register an application to get started.</p>
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <div class="page-header">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="muted">Applications, environments and deployments managed by the control center.</p>
+    </div>
+    <a class="btn" th:href="@{/applications/new}">Register application</a>
+  </div>
+
+  <div class="grid grid-4" style="margin-bottom: 1.25rem">
+    <div class="stat">
+      <div class="label">Applications</div>
+      <div class="value" th:text="${summary.applicationCount}">0</div>
+    </div>
+    <div class="stat">
+      <div class="label">Environments</div>
+      <div class="value" th:text="${summary.environmentCount}">0</div>
+      <div class="muted"><span th:text="${summary.activeEnvironmentCount}">0</span> active ·
+        <span th:text="${summary.unhealthyEnvironmentCount}">0</span> unhealthy</div>
+    </div>
+    <div class="stat">
+      <div class="label">Deployments</div>
+      <div class="value" th:text="${summary.deploymentCount}">0</div>
+      <div class="muted"><span th:text="${summary.inProgressCount}">0</span> in progress ·
+        <span th:text="${summary.failedCount}">0</span> failed</div>
+    </div>
+    <div class="stat">
+      <div class="label">Success rate</div>
+      <div class="value" th:text="${summary.successRate != null} ? ${summary.successRate} + '%' : '—'">—</div>
+    </div>
+  </div>
+
+  <div class="card table-wrap">
+    <h2>Environments</h2>
+    <p th:if="${#lists.isEmpty(summary.environments)}" class="muted">
+      No environments yet. <a th:href="@{/applications}">Open an application</a> to create <code>dev</code> and <code>prod</code>.
+    </p>
+    <table th:unless="${#lists.isEmpty(summary.environments)}">
+      <thead>
+      <tr><th>Application</th><th>Environment</th><th>Current version</th><th>Status</th><th>Health</th><th>Last check</th></tr>
+      </thead>
+      <tbody>
+      <tr th:each="env : ${summary.environments}">
+        <td><a th:href="@{/applications/{id}(id=${env.application.id})}" th:text="${env.application.name}">app</a></td>
+        <td><a th:href="@{/environments/{id}(id=${env.id})}" th:text="${env.name}">dev</a></td>
+        <td class="mono" th:text="${env.currentVersion} ?: '—'">v1</td>
+        <td><span class="badge" th:classappend="'badge-' + ${env.status}" th:text="${env.status}">ACTIVE</span></td>
+        <td><span class="badge" th:classappend="'badge-' + ${env.healthStatus}" th:text="${env.healthStatus}">HEALTHY</span></td>
+        <td th:text="${@fmt.time(env.lastHealthCheckAt)}">time</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="page-header" style="margin-bottom: 0.5rem">
+      <h2>Recent deployments</h2>
+      <a th:href="@{/deployments}">View full history &rarr;</a>
+    </div>
+    <div th:replace="~{fragments/deployments :: table(${summary.recentDeployments}, true, null)}"></div>
+  </div>
 </main>
 <footer th:replace="~{fragments/layout :: footer}"></footer>
 </body>

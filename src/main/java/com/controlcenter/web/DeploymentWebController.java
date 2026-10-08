@@ -7,6 +7,8 @@ import com.controlcenter.service.DeploymentService;
 import com.controlcenter.web.form.DeploymentForm;
 import jakarta.validation.Valid;
 import java.util.Arrays;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -19,6 +21,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 @Controller
 public class DeploymentWebController {
+
+    private static final int PAGE_SIZE = 20;
 
     private final DeploymentService deploymentService;
 
@@ -42,6 +46,16 @@ public class DeploymentWebController {
             redirect.addFlashAttribute("error", ex.getMessage());
             return "redirect:/environments/" + environmentId;
         }
+    }
+
+    @GetMapping("/deployments")
+    public String history(@RequestParam(required = false) DeploymentStatus status,
+                          @RequestParam(defaultValue = "0") int page, Model model) {
+        Page<Deployment> deployments = deploymentService.findAll(status, PageRequest.of(Math.max(page, 0), PAGE_SIZE));
+        model.addAttribute("deployments", deployments);
+        model.addAttribute("selectedStatus", status);
+        model.addAttribute("statuses", DeploymentStatus.values());
+        return "deployments/list";
     }
 
     @GetMapping("/deployments/{id}")

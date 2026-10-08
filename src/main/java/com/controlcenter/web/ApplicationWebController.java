@@ -4,6 +4,7 @@ import com.controlcenter.common.ConflictException;
 import com.controlcenter.domain.Application;
 import com.controlcenter.domain.Environment;
 import com.controlcenter.service.ApplicationService;
+import com.controlcenter.service.DeploymentService;
 import com.controlcenter.service.EnvironmentService;
 import com.controlcenter.web.form.ApplicationForm;
 import com.controlcenter.web.form.EnvironmentForm;
@@ -25,12 +26,17 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @RequestMapping("/applications")
 public class ApplicationWebController {
 
+    private static final int RECENT_DEPLOYMENTS = 10;
+
     private final ApplicationService applicationService;
     private final EnvironmentService environmentService;
+    private final DeploymentService deploymentService;
 
-    public ApplicationWebController(ApplicationService applicationService, EnvironmentService environmentService) {
+    public ApplicationWebController(ApplicationService applicationService, EnvironmentService environmentService,
+                                    DeploymentService deploymentService) {
         this.applicationService = applicationService;
         this.environmentService = environmentService;
+        this.deploymentService = deploymentService;
     }
 
     @GetMapping
@@ -69,6 +75,7 @@ public class ApplicationWebController {
         model.addAttribute("application", applicationService.get(id));
         model.addAttribute("environments", environmentService.findByApplication(id));
         model.addAttribute("environmentForm", new EnvironmentForm());
+        model.addAttribute("recentDeployments", deploymentService.findRecentByApplication(id, RECENT_DEPLOYMENTS));
         return "applications/detail";
     }
 

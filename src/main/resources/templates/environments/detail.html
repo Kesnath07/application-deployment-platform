@@ -24,6 +24,12 @@
       <dl class="details">
         <dt>Current version</dt>
         <dd class="mono" th:text="${environment.currentVersion} ?: 'Not deployed'">v1</dd>
+        <dt>Live image</dt>
+        <dd class="mono">
+          <a th:if="${currentDeployment}" th:href="@{/deployments/{id}(id=${currentDeployment.id})}"
+             th:text="${currentDeployment.imageTag}">sha</a>
+          <span th:unless="${currentDeployment}">—</span>
+        </dd>
         <dt>Deployment status</dt>
         <dd th:text="${environment.status}">ACTIVE</dd>
         <dt>Health</dt>
@@ -48,6 +54,22 @@
         <div class="form-actions"><button type="submit" class="btn btn-secondary">Save URL</button></div>
       </form>
     </div>
+  </div>
+
+  <div class="card" th:if="${currentDeployment}">
+    <h2>Rollback</h2>
+    <div th:if="${rollbackTarget}">
+      <p>Redeploy the previous successful version
+        <strong class="mono" th:text="${rollbackTarget.version}">v0</strong>
+        (image <span class="mono" th:text="${@fmt.shortTag(rollbackTarget.imageTag)}">sha</span>,
+        deployment #<span th:text="${rollbackTarget.id}">1</span>).
+        The image already exists in ECR, so the pipeline skips the build and only updates the ECS service.</p>
+      <form th:action="@{/environments/{id}/rollback(id=${environment.id})}" method="post"
+            th:attr="onsubmit=|return confirm('Roll back ${environment.name} to ${rollbackTarget.version}?')|">
+        <button type="submit" class="btn btn-warning">Roll back to <span th:text="${rollbackTarget.version}">v0</span></button>
+      </form>
+    </div>
+    <p th:unless="${rollbackTarget}" class="muted">No earlier successful version with a different image is available.</p>
   </div>
 
   <div class="card">
@@ -75,7 +97,7 @@
 
   <div class="card">
     <h2>Deployment history</h2>
-    <div th:replace="~{fragments/deployments :: table(${deployments}, false)}"></div>
+    <div th:replace="~{fragments/deployments :: table(${deployments}, false, ${rollbackCandidateIds})}"></div>
   </div>
 </main>
 <footer th:replace="~{fragments/layout :: footer}"></footer>

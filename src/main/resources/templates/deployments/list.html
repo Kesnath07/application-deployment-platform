@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Deployments')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav('deployments')}"></header>
+<main class="container">
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <div class="page-header">
+    <div>
+      <h1>Deployment history</h1>
+      <p class="muted" th:text="${deployments.totalElements} + ' deployments across all applications'">0 deployments</p>
+    </div>
+    <form method="get" th:action="@{/deployments}">
+      <select name="status" onchange="this.form.submit()" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option th:each="s : ${statuses}" th:value="${s}" th:text="${s}" th:selected="${s == selectedStatus}">SUCCESS</option>
+      </select>
+    </form>
+  </div>
+
+  <div class="card">
+    <div th:replace="~{fragments/deployments :: table(${deployments.content}, true, null)}"></div>
+  </div>
+
+  <div class="form-actions" th:if="${deployments.totalPages > 1}">
+    <a class="btn btn-secondary btn-sm" th:if="${deployments.hasPrevious()}"
+       th:href="@{/deployments(page=${deployments.number - 1}, status=${selectedStatus})}">&larr; Newer</a>
+    <span class="muted" th:text="'Page ' + ${deployments.number + 1} + ' of ' + ${deployments.totalPages}">Page 1</span>
+    <a class="btn btn-secondary btn-sm" th:if="${deployments.hasNext()}"
+       th:href="@{/deployments(page=${deployments.number + 1}, status=${selectedStatus})}">Older &rarr;</a>
+  </div>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
