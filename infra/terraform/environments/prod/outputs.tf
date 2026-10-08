@@ -47,3 +47,13 @@ output "db_credentials_secret_arn" {
   description = "Secrets Manager secret with the database credentials."
   value       = module.rds.credentials_secret_arn
 }
+
+output "cloudwatch_dashboard_url" {
+  description = "CloudWatch dashboard with ECS, ALB, RDS and log metrics."
+  value       = module.monitoring.dashboard_url
+}
+
+output "cloudwatch_alarms" {
+  description = "CloudWatch alarms created for the environment."
+  value       = module.monitoring.alarm_names
+}
