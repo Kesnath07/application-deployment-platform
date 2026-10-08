@@ -57,3 +57,27 @@ output "cloudwatch_alarms" {
   description = "CloudWatch alarms created for the environment."
   value       = module.monitoring.alarm_names
 }
+
+output "ecr_repository_name" {
+  description = "ECR repository name (GitHub environment variable ECR_REPOSITORY)."
+  value       = module.ecr.repository_name
+}
+
+output "github_deploy_role_arn" {
+  description = "IAM role for GitHub Actions OIDC (GitHub environment variable AWS_DEPLOY_ROLE_ARN)."
+  value       = module.iam.github_deploy_role_arn
+}
+
+output "github_environment_variables" {
+  description = "Variables to configure in the GitHub environment used by the deploy workflow."
+  value = {
+    AWS_REGION          = var.aws_region
+    AWS_DEPLOY_ROLE_ARN = module.iam.github_deploy_role_arn
+    ECR_REPOSITORY      = module.ecr.repository_name
+    ECS_CLUSTER         = module.ecs.cluster_name
+    ECS_SERVICE         = module.ecs.service_name
+    ECS_TASK_DEFINITION = module.ecs.task_definition_family
+    ECS_CONTAINER_NAME  = module.ecs.container_name
+    APP_URL             = module.alb.url
+  }
+}
