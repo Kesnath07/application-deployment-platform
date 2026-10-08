@@ -53,3 +53,67 @@ variable "ecr_max_image_count" {
   type        = number
   default     = 30
 }
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS on the load balancer. Leave null to serve HTTP only."
+  type        = string
+  default     = null
+}
+
+# --- Application / ECS -------------------------------------------------------
+
+variable "container_port" {
+  description = "Port the Spring Boot application listens on."
+  type        = number
+  default     = 8080
+}
+
+variable "initial_image_tag" {
+  description = "Image tag used when Terraform first creates the task definition. Subsequent deployments are made by GitHub Actions."
+  type        = string
+  default     = "bootstrap"
+}
+
+variable "task_cpu" {
+  description = "Fargate task CPU units."
+  type        = number
+  default     = 512
+}
+
+variable "task_memory" {
+  description = "Fargate task memory (MiB)."
+  type        = number
+  default     = 1024
+}
+
+variable "desired_count" {
+  description = "Number of ECS tasks."
+  type        = number
+  default     = 2
+}
+
+variable "enable_execute_command" {
+  description = "Enable ECS Exec for interactive debugging."
+  type        = bool
+  default     = false
+}
+
+variable "github_token_secret_arn" {
+  description = "Optional ARN of a Secrets Manager secret (plain string) holding a GitHub token with Actions write access. Enables workflow dispatch from the dashboard."
+  type        = string
+  default     = null
+}
+
+# --- Database ----------------------------------------------------------------
+
+variable "db_instance_class" {
+  description = "RDS instance class."
+  type        = string
+  default     = "db.t4g.small"
+}
+
+variable "db_password_version" {
+  description = "Increment to rotate the database password, then force a new ECS deployment."
+  type        = number
+  default     = 1
+}
