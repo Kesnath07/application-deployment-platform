@@ -13,3 +13,5 @@ control-center:
   environment: test
   health-check:
     enabled: false
+  github:
+    enabled: false

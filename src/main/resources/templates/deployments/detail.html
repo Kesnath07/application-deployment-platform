@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Deployment #' + ${deployment.id})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav('deployments')}"></header>
+<main class="container">
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <div class="breadcrumb">
+    <a th:href="@{/applications/{id}(id=${deployment.application.id})}" th:text="${deployment.application.name}">app</a> /
+    <a th:href="@{/environments/{id}(id=${deployment.environment.id})}" th:text="${deployment.environment.name}">env</a> /
+    <span th:text="'Deployment #' + ${deployment.id}">deployment</span>
+  </div>
+  <div class="page-header">
+    <div>
+      <h1 th:text="'Deployment #' + ${deployment.id}">Deployment</h1>
+      <span class="badge" th:classappend="'badge-' + ${deployment.status}" th:text="${deployment.status}">SUCCESS</span>
+      <span th:if="${deployment.rollback}" class="badge badge-ROLLED_BACK">rollback</span>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2>Details</h2>
+      <dl class="details">
+        <dt>Application</dt>
+        <dd th:text="${deployment.application.name}">app</dd>
+        <dt>Environment</dt>
+        <dd th:text="${deployment.environment.name}">env</dd>
+        <dt>Version</dt>
+        <dd class="mono" th:text="${deployment.version}">v1</dd>
+        <dt>Image tag</dt>
+        <dd class="mono" th:text="${deployment.imageTag}">sha</dd>
+        <dt>Created</dt>
+        <dd th:text="${@fmt.time(deployment.createdAt)}">time</dd>
+        <dt>Started</dt>
+        <dd th:text="${@fmt.time(deployment.startedAt)}">time</dd>
+        <dt>Completed</dt>
+        <dd th:text="${@fmt.time(deployment.completedAt)}">time</dd>
+        <dt>Duration</dt>
+        <dd th:text="${@fmt.duration(deployment.startedAt, deployment.completedAt)}">1m</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Pipeline log</h2>
+      <p class="mono" style="white-space: pre-line" th:text="${deployment.message} ?: 'No messages yet.'">log</p>
+      <div th:unless="${#lists.isEmpty(nextStatuses)}">
+        <p class="hint">The GitHub Actions workflow reports status automatically. Use these actions only when
+          the pipeline ran without the callback.</p>
+        <div class="form-actions">
+          <form th:each="s : ${nextStatuses}" class="inline-form"
+                th:action="@{/deployments/{id}/status(id=${deployment.id})}" method="post">
+            <input type="hidden" name="status" th:value="${s}">
+            <button type="submit" class="btn btn-sm"
+                    th:classappend="${s.name() == 'SUCCESS'} ? 'btn-success' : (${s.name() == 'FAILED'} ? 'btn-danger' : 'btn-secondary')"
+                    th:text="'Mark ' + ${s}">Mark</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

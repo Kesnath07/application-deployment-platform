@@ -23,6 +23,8 @@ import org.hibernate.annotations.CreationTimestamp;
 @Table(name = "deployments")
 public class Deployment {
 
+    private static final int MESSAGE_LIMIT = 1000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -70,7 +72,7 @@ public class Deployment {
         this.version = version;
         this.imageTag = imageTag;
         this.rollback = rollback;
-        this.message = message;
+        appendMessage(message);
     }
 
     /**
@@ -88,9 +90,19 @@ public class Deployment {
             completedAt = now;
         }
         this.status = target;
-        if (message != null && !message.isBlank()) {
-            this.message = message;
+        appendMessage(message);
+    }
+
+    /**
+     * Appends a note to the deployment's message log, keeping the most recent entries
+     * when the column limit is reached.
+     */
+    public void appendMessage(String note) {
+        if (note == null || note.isBlank()) {
+            return;
         }
+        String combined = message == null ? note.trim() : message + "\n" + note.trim();
+        this.message = combined.length() <= MESSAGE_LIMIT ? combined : combined.substring(combined.length() - MESSAGE_LIMIT);
     }
 
     public boolean isInProgress() {

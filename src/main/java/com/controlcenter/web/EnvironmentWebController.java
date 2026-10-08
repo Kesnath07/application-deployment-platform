@@ -3,8 +3,10 @@ package com.controlcenter.web;
 import com.controlcenter.api.dto.ValidationPatterns;
 import com.controlcenter.domain.Environment;
 import com.controlcenter.domain.HealthStatus;
+import com.controlcenter.service.DeploymentService;
 import com.controlcenter.service.EnvironmentHealthChecker;
 import com.controlcenter.service.EnvironmentService;
+import com.controlcenter.web.form.DeploymentForm;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,15 +22,20 @@ public class EnvironmentWebController {
 
     private final EnvironmentService environmentService;
     private final EnvironmentHealthChecker healthChecker;
+    private final DeploymentService deploymentService;
 
-    public EnvironmentWebController(EnvironmentService environmentService, EnvironmentHealthChecker healthChecker) {
+    public EnvironmentWebController(EnvironmentService environmentService, EnvironmentHealthChecker healthChecker,
+                                    DeploymentService deploymentService) {
         this.environmentService = environmentService;
         this.healthChecker = healthChecker;
+        this.deploymentService = deploymentService;
     }
 
     @GetMapping("/{id}")
     public String detail(@PathVariable Long id, Model model) {
         model.addAttribute("environment", environmentService.get(id));
+        model.addAttribute("deployments", deploymentService.findByEnvironment(id));
+        model.addAttribute("deploymentForm", new DeploymentForm());
         return "environments/detail";
     }
 

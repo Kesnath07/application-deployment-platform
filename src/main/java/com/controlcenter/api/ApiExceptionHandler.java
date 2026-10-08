@@ -13,6 +13,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /** Translates exceptions raised by REST controllers into consistent JSON error responses. */
 @RestControllerAdvice(basePackages = "com.controlcenter.api")
@@ -38,9 +39,14 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Request validation failed", request, details);
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class})
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ApiError> unreadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Malformed request body", request, List.of());
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<ApiError> badRequest(Exception ex, HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, "Malformed request: " + ex.getMessage(), request, List.of());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request, List.of());
     }
 
     @ExceptionHandler(Exception.class)

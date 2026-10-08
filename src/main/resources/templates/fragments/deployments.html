@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- Reusable deployment history table. showTarget=true adds application/environment columns. -->
+<div th:fragment="table(deployments, showTarget)" class="table-wrap">
+  <p th:if="${#lists.isEmpty(deployments)}" class="muted">No deployments yet.</p>
+  <table th:unless="${#lists.isEmpty(deployments)}">
+    <thead>
+    <tr>
+      <th>#</th>
+      <th th:if="${showTarget}">Application</th>
+      <th th:if="${showTarget}">Environment</th>
+      <th>Version</th>
+      <th>Image tag</th>
+      <th>Status</th>
+      <th>Created</th>
+      <th>Duration</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="d : ${deployments}">
+      <td><a th:href="@{/deployments/{id}(id=${d.id})}" th:text="${d.id}">1</a></td>
+      <td th:if="${showTarget}">
+        <a th:href="@{/applications/{id}(id=${d.application.id})}" th:text="${d.application.name}">app</a>
+      </td>
+      <td th:if="${showTarget}">
+        <a th:href="@{/environments/{id}(id=${d.environment.id})}" th:text="${d.environment.name}">env</a>
+      </td>
+      <td class="mono">
+        <span th:text="${d.version}">v1</span>
+        <span th:if="${d.rollback}" class="badge badge-ROLLED_BACK" title="Rollback deployment">rollback</span>
+      </td>
+      <td class="mono" th:text="${@fmt.shortTag(d.imageTag)}" th:title="${d.imageTag}">sha</td>
+      <td><span class="badge" th:classappend="'badge-' + ${d.status}" th:text="${d.status}">SUCCESS</span></td>
+      <td th:text="${@fmt.time(d.createdAt)}">time</td>
+      <td th:text="${@fmt.duration(d.startedAt, d.completedAt)}">1m</td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
