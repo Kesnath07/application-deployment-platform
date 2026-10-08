@@ -1,0 +1,7 @@
+# Copy to backend.hcl (git-ignored) and run: terraform init -backend-config=backend.hcl
+# The bucket must exist beforehand (see docs/infrastructure.md#remote-state).
+bucket       = "<state-bucket-name>"
+key          = "control-center/prod/terraform.tfstate"
+region       = "eu-central-1"
+encrypt      = true
+use_lockfile = true
