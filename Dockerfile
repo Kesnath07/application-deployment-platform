@@ -5,7 +5,7 @@
 # Tests are executed by the CI pipeline before the image is built, so they are
 # skipped here to keep image builds fast and free of test-only infrastructure.
 # ---------------------------------------------------------------------------
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /workspace
 
 COPY pom.xml .
