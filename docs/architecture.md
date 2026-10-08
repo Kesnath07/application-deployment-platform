@@ -99,12 +99,26 @@ Environment state follows from its deployments:
 `healthStatus` (`UNKNOWN`, `HEALTHY`, `UNHEALTHY`) is kept separately. It comes from HTTP probes of
 `<environment url>/api/health`.
 
+The UI and `GET /api/environments/{id}/status` combine both into a derived operational state, which is
+never stored:
+
+| State | Meaning |
+|---|---|
+| `NOT_DEPLOYED` | Nothing has been deployed yet |
+| `DEPLOYING` | A deployment is pending or running |
+| `FAILED` | No version is live because the first deployment failed |
+| `DOWN` | A version is live but its health probe fails (takes precedence over `DEPLOYING`) |
+| `DEGRADED` | The latest deployment failed; the previous version is still serving |
+| `HEALTHY` | The live version passed its last health probe |
+| `UNVERIFIED` | A version is live but no probe has passed yet (no URL configured or not probed yet) |
+
 ## Key design decisions
 
 | Decision | Rationale |
 |---|---|
 | Immutable image tags (commit SHA), `latest` rejected | A deployment record always points to exactly one image, which makes rollbacks deterministic. ECR enforces `IMMUTABLE` tags |
 | Only one in-progress deployment per environment | Prevents racing rollouts. The deploy workflow also serialises per environment with a `concurrency` group |
+| The live image cannot be deployed again; callbacks cannot set `PENDING` or `ROLLED_BACK` | Duplicate rollouts and hand-crafted `ROLLED_BACK` states would make the history disagree with what is running |
 | Workflow dispatched outside DB transactions | No database locks held during HTTP calls. The outcome is recorded in a second short transaction |
 | Rollback = redeploy an existing image | No rebuild. Fast and identical to the previously verified artifact |
 | Replaced deployment marked `ROLLED_BACK` only after the rollback succeeds | A failed rollback leaves history consistent with what is actually running |

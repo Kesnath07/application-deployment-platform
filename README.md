@@ -42,9 +42,11 @@ The control center deploys itself with the same pipeline it drives for other app
 | Deployment history | Per environment, per application, and a global history page you can filter and page through |
 | Rollback | One click redeploys the previous successful image. The replaced deployment becomes `ROLLED_BACK` |
 | Basic health | Scheduled HTTP probes of each environment's `/api/health` through its load balancer |
+| Operational state | Each environment is shown as `HEALTHY`, `DEPLOYING`, `DEGRADED`, `DOWN`, … with its last deployment and failure reason |
 
 Screens: dashboard (KPIs, environment overview, recent deployments), applications, application
-detail, environment detail (deploy form, history, rollback), deployment detail (pipeline log).
+detail, environment detail (operational state, deploy form, history, rollback), deployment detail
+(pipeline log, failure reason).
 
 ## Architecture
 
@@ -290,12 +292,18 @@ Alarm notifications are optional: pass existing SNS topic ARNs as `alarm_actions
 | `GET` / `PUT` | `/api/applications/{id}` | Get / update an application |
 | `GET` / `POST` | `/api/applications/{id}/environments` | List / create environments |
 | `GET` / `PATCH` | `/api/environments/{id}` | Get an environment / update its URL |
+| `GET` | `/api/applications/{id}/status` | Operational state of every environment of an application |
+| `GET` | `/api/environments/{id}/status` | Operational state, health, live and latest deployment, failure reason |
 | `POST` | `/api/environments/{id}/health-check` | Run a health probe now |
 | `GET` / `POST` | `/api/environments/{id}/deployments` | Deployment history / deploy an image |
 | `POST` | `/api/environments/{id}/rollback` | Roll back (optional `targetDeploymentId`, `reason`) |
 | `GET` | `/api/deployments?status=&page=&size=` | Paged deployment history |
 | `GET` | `/api/deployments/{id}` | Deployment details |
-| `POST` | `/api/deployments/{id}/status` | Pipeline status callback (`RUNNING`, `SUCCESS`, `FAILED`) |
+| `POST` | `/api/deployments/{id}/status` | Pipeline status callback (`RUNNING`, `SUCCESS`, `FAILED`; anything else is `400`) |
+
+Invalid requests get a JSON error: `400` for malformed input (including the `latest` tag), `404` for an
+unknown application, environment or deployment, and `409` when the request conflicts with the current
+state, e.g. a deployment already in progress, the image already live, or an illegal status transition.
 
 ```bash
 curl -X POST localhost:8080/api/environments/1/deployments \

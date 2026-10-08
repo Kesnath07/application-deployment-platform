@@ -12,6 +12,7 @@ import com.controlcenter.api.dto.ApplicationRequest;
 import com.controlcenter.api.dto.DeploymentRequest;
 import com.controlcenter.api.dto.EnvironmentRequest;
 import com.controlcenter.common.ConflictException;
+import com.controlcenter.common.NotFoundException;
 import com.controlcenter.domain.Deployment;
 import com.controlcenter.domain.DeploymentStatus;
 import com.controlcenter.github.DispatchResult;
@@ -139,6 +140,53 @@ class RollbackServiceTest {
         assertThatThrownBy(() -> rollbackService.rollback(environmentId, null, null))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("No previous successful version");
+    }
+
+    @Test
+    void rejectsRollbackWhileADeploymentIsInProgress() {
+        deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        deploySuccessfully("bbbbbbbbbbbb", "2.0.0");
+        deploymentService.deploy(environmentId, new DeploymentRequest("cccccccccccc", "3.0.0", null));
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, null, null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already has a deployment in progress");
+    }
+
+    @Test
+    void rejectsUnknownTarget() {
+        deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        deploySuccessfully("bbbbbbbbbbbb", "2.0.0");
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, 999_999L, null))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void failedDeploymentsAreNeverRollbackTargets() {
+        Deployment v1 = deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        Deployment broken = deploymentService.deploy(environmentId, new DeploymentRequest("bbbbbbbbbbbb", "2.0.0", null));
+        deploymentService.updateStatus(broken.getId(), DeploymentStatus.FAILED, "tasks unhealthy");
+        deploySuccessfully("cccccccccccc", "3.0.0");
+
+        assertThat(rollbackService.rollbackCandidates(environmentId)).extracting(Deployment::getId)
+                .containsExactly(v1.getId());
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, broken.getId(), null))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void rolledBackDeploymentIsNoLongerACandidate() {
+        deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        Deployment v2 = deploySuccessfully("bbbbbbbbbbbb", "2.0.0");
+        Deployment rollback = rollbackService.rollback(environmentId, null, null);
+        deploymentService.updateStatus(rollback.getId(), DeploymentStatus.SUCCESS, null);
+
+        assertThat(deploymentService.get(v2.getId()).getStatus()).isEqualTo(DeploymentStatus.ROLLED_BACK);
+        assertThat(rollbackService.currentDeployment(environmentId)).get()
+                .extracting(Deployment::getId).isEqualTo(rollback.getId());
+        // The original 1.0.0 deployment carries the live image, so nothing is left to roll back to.
+        assertThat(rollbackService.rollbackCandidates(environmentId)).isEmpty();
     }
 
     @Test

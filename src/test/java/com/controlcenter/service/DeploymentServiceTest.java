@@ -189,6 +189,60 @@ class DeploymentServiceTest {
     }
 
     @Test
+    void trimsInputAndDefaultsTheVersionToTheShortTag() {
+        Deployment deployment = deploymentService.deploy(environmentId,
+                new DeploymentRequest("  " + SHA + "  ", " ", "  hotfix for checkout  "));
+
+        assertThat(deployment.getImageTag()).isEqualTo(SHA);
+        assertThat(deployment.getVersion()).isEqualTo("3f2a9c1e5b7d");
+        assertThat(deployment.getMessage()).startsWith("hotfix for checkout\n");
+    }
+
+    @Test
+    void failedDispatchKeepsTheLiveVersionServing() {
+        Deployment live = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        deploymentService.updateStatus(live.getId(), DeploymentStatus.SUCCESS, null);
+        when(dispatcher.dispatch(any())).thenReturn(DispatchResult.failed("GitHub API returned 422"));
+
+        Deployment failed = deploymentService.deploy(environmentId, new DeploymentRequest("bbbbbbbbbbbb", "2.0.0", null));
+
+        assertThat(failed.getStatus()).isEqualTo(DeploymentStatus.FAILED);
+        assertThat(failed.getLatestNote()).isEqualTo("GitHub API returned 422");
+        Environment environment = environmentService.get(environmentId);
+        assertThat(environment.getStatus()).isEqualTo(EnvironmentStatus.ACTIVE);
+        assertThat(environment.getCurrentVersion()).isEqualTo("1.0.0");
+    }
+
+    @Test
+    void completesAPendingDeploymentReportedDirectlyAsSuccessful() {
+        when(dispatcher.dispatch(any())).thenReturn(DispatchResult.skipped("dispatch disabled"));
+        Deployment pending = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        assertThat(environmentService.get(environmentId).getStatus()).isEqualTo(EnvironmentStatus.DEPLOYING);
+
+        Deployment done = deploymentService.updateStatus(pending.getId(), DeploymentStatus.SUCCESS, "reported manually");
+
+        assertThat(done.getStartedAt()).isNotNull();
+        assertThat(done.getCompletedAt()).isEqualTo(done.getStartedAt());
+        assertThat(environmentService.get(environmentId).getStatus()).isEqualTo(EnvironmentStatus.ACTIVE);
+    }
+
+    @Test
+    void rejectsDuplicateRunningReport() {
+        Deployment running = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+
+        assertThatThrownBy(() -> deploymentService.updateStatus(running.getId(), DeploymentStatus.RUNNING, "again"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("RUNNING to RUNNING");
+        assertThat(deploymentService.get(running.getId()).getMessage()).doesNotContain("again");
+    }
+
+    @Test
+    void failsForUnknownDeployment() {
+        assertThatThrownBy(() -> deploymentService.updateStatus(999_999L, DeploymentStatus.SUCCESS, null))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
     void failsForUnknownEnvironment() {
         assertThatThrownBy(() -> deploymentService.deploy(999_999L, new DeploymentRequest(SHA, null, null)))
                 .isInstanceOf(NotFoundException.class);

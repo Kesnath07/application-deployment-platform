@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -19,6 +20,7 @@ import com.controlcenter.service.DeploymentService;
 import com.controlcenter.service.EnvironmentService;
 import com.controlcenter.support.DatabaseCleaner;
 import com.controlcenter.support.IntegrationTest;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -169,6 +171,61 @@ class WebPagesTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrlPattern("/deployments/*"))
                 .andExpect(flash().attribute("success", containsString("Rollback to 1.0.0")));
+    }
+
+    @Test
+    void deploysThroughForm() throws Exception {
+        mvc.perform(post("/environments/" + environmentId + "/deployments")
+                        .param("imageTag", "cccccccccccc").param("version", "3.0.0").param("message", "release"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("/deployments/*"))
+                .andExpect(flash().attribute("success", containsString("of 3.0.0 created (PENDING)")));
+    }
+
+    @Test
+    void rejectsInvalidDeploymentsFromForm() throws Exception {
+        String environmentUrl = "/environments/" + environmentId;
+        mvc.perform(post(environmentUrl + "/deployments").param("imageTag", ""))
+                .andExpect(redirectedUrl(environmentUrl))
+                .andExpect(flash().attribute("error", containsString("Deployment not created: imageTag")));
+        mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "latest"))
+                .andExpect(redirectedUrl(environmentUrl))
+                .andExpect(flash().attribute("error", containsString("'latest' is not allowed")));
+        mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "bbbbbbbbbbbb"))
+                .andExpect(redirectedUrl(environmentUrl))
+                .andExpect(flash().attribute("error", containsString("already live")));
+
+        mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "cccccccccccc"));
+        mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "dddddddddddd"))
+                .andExpect(redirectedUrl(environmentUrl))
+                .andExpect(flash().attribute("error", containsString("already has a deployment in progress")));
+    }
+
+    @Test
+    void reportsStatusManuallyAndRejectsInvalidReports() throws Exception {
+        Deployment pending = deploymentService.deploy(environmentId, new DeploymentRequest("cccccccccccc", "3.0.0", null));
+        String statusUrl = "/deployments/" + pending.getId() + "/status";
+
+        mvc.perform(post(statusUrl).param("status", "SUCCESS"))
+                .andExpect(redirectedUrl("/deployments/" + pending.getId()))
+                .andExpect(flash().attribute("success", "Deployment marked SUCCESS"));
+        mvc.perform(post(statusUrl).param("status", "FAILED"))
+                .andExpect(flash().attribute("error", containsString("cannot move from SUCCESS to FAILED")));
+        mvc.perform(post(statusUrl).param("status", "ROLLED_BACK"))
+                .andExpect(flash().attribute("error", containsString("cannot be reported")));
+        mvc.perform(get("/deployments/" + pending.getId()))
+                .andExpect(model().attribute("nextStatuses", List.of()));
+    }
+
+    @Test
+    void rejectsRollbackToAnotherEnvironmentsDeployment() throws Exception {
+        Long stagingId = environmentService.create(applicationId, new EnvironmentRequest("staging", null)).getId();
+        Deployment staging = deploymentService.deploy(stagingId, new DeploymentRequest("cccccccccccc", null, null));
+
+        mvc.perform(post("/environments/" + environmentId + "/rollback")
+                        .param("targetDeploymentId", staging.getId().toString()))
+                .andExpect(redirectedUrl("/environments/" + environmentId))
+                .andExpect(flash().attribute("error", containsString("belongs to environment 'staging'")));
     }
 
     @Test

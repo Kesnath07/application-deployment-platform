@@ -77,6 +77,25 @@ class DeploymentRepositoryTest {
     }
 
     @Test
+    void findsLatestAndLiveDeploymentPerEnvironment() {
+        Environment prod = environments.save(new Environment(dev.getApplication(), "prod", null));
+        Deployment devLive = save("aaa", DeploymentStatus.SUCCESS, Instant.now());
+        Deployment devFailed = save("bbb", DeploymentStatus.FAILED, Instant.now());
+        Deployment prodPending = entityManager.persistAndFlush(new Deployment(prod, "1.0", "ccc", false, null));
+        entityManager.clear();
+
+        List<Deployment> latest = deployments.findLatestByEnvironmentIds(List.of(dev.getId(), prod.getId()));
+        List<Deployment> live = deployments.findLatestByEnvironmentIdsAndStatus(List.of(dev.getId(), prod.getId()),
+                DeploymentStatus.SUCCESS);
+
+        assertThat(latest).extracting(Deployment::getId)
+                .containsExactlyInAnyOrder(devFailed.getId(), prodPending.getId());
+        assertThat(live).extracting(Deployment::getId).containsExactly(devLive.getId());
+        assertThat(deployments.findLatestByEnvironmentIds(List.of(prod.getId())).getFirst().getEnvironment().getName())
+                .isEqualTo("prod");
+    }
+
+    @Test
     void enforcesUniqueEnvironmentNamePerApplication() {
         Environment duplicate = new Environment(dev.getApplication(), "dev", null);
 
