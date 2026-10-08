@@ -32,6 +32,9 @@ server:
   shutdown: graceful
   # The ALB terminates client connections and forwards X-Forwarded-* headers.
   forward-headers-strategy: framework
+  servlet:
+    session:
+      tracking-modes: cookie
   error:
     include-stacktrace: never
 
@@ -52,6 +55,11 @@ management:
 control-center:
   version: ${APP_VERSION:local}
   environment: ${APP_ENVIRONMENT:local}
+  health-check:
+    enabled: ${HEALTH_CHECK_ENABLED:true}
+    interval: ${HEALTH_CHECK_INTERVAL:PT60S}
+    timeout: PT3S
+    path: /api/health
 
 logging:
   level:

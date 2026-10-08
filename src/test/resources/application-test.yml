@@ -11,3 +11,5 @@ spring:
 control-center:
   version: test
   environment: test
+  health-check:
+    enabled: false

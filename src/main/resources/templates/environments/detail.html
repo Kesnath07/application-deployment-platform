@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${environment.application.name} + ' / ' + ${environment.name})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav('applications')}"></header>
+<main class="container">
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <div class="breadcrumb">
+    <a th:href="@{/applications}">Applications</a> /
+    <a th:href="@{/applications/{id}(id=${environment.application.id})}" th:text="${environment.application.name}">app</a> /
+    <span th:text="${environment.name}">env</span>
+  </div>
+  <div class="page-header">
+    <div>
+      <h1><span th:text="${environment.application.name}">app</span> · <span th:text="${environment.name}">env</span></h1>
+      <span class="badge" th:classappend="'badge-' + ${environment.status}" th:text="${environment.status}">ACTIVE</span>
+      <span class="badge" th:classappend="'badge-' + ${environment.healthStatus}" th:text="${environment.healthStatus}">HEALTHY</span>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2>Status</h2>
+      <dl class="details">
+        <dt>Current version</dt>
+        <dd class="mono" th:text="${environment.currentVersion} ?: 'Not deployed'">v1</dd>
+        <dt>Deployment status</dt>
+        <dd th:text="${environment.status}">ACTIVE</dd>
+        <dt>Health</dt>
+        <dd th:text="${environment.healthStatus}">HEALTHY</dd>
+        <dt>Last health check</dt>
+        <dd th:text="${@fmt.time(environment.lastHealthCheckAt)}">time</dd>
+        <dt>URL</dt>
+        <dd><a class="mono" th:if="${environment.url}" th:href="${environment.url}" th:text="${environment.url}" target="_blank" rel="noopener">url</a>
+          <span th:unless="${environment.url}" class="muted">Not configured</span></dd>
+      </dl>
+      <form class="form-actions" th:action="@{/environments/{id}/health-check(id=${environment.id})}" method="post">
+        <button type="submit" class="btn btn-secondary">Run health check</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Endpoint</h2>
+      <form class="stacked" th:action="@{/environments/{id}/url(id=${environment.id})}" method="post">
+        <label for="url">Public URL</label>
+        <input type="url" id="url" name="url" th:value="${environment.url}" placeholder="http://my-alb-123.eu-central-1.elb.amazonaws.com">
+        <p class="hint">Use the <code>alb_url</code> Terraform output. The control center probes <code>{url}/api/health</code>.</p>
+        <div class="form-actions"><button type="submit" class="btn btn-secondary">Save URL</button></div>
+      </form>
+    </div>
+  </div>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

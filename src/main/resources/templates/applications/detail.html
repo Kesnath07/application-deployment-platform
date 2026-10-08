@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${application.name})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav('applications')}"></header>
+<main class="container">
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <div class="breadcrumb"><a th:href="@{/applications}">Applications</a> / <span th:text="${application.name}">app</span></div>
+  <div class="page-header">
+    <div>
+      <h1 th:text="${application.name}">app</h1>
+      <p class="muted" th:text="${application.description} ?: 'No description'">description</p>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2>Details</h2>
+      <dl class="details">
+        <dt>Repository</dt>
+        <dd><a class="mono" th:href="${application.repositoryUrl}" th:text="${application.repositoryUrl}" target="_blank" rel="noopener">repo</a></dd>
+        <dt>Default branch</dt>
+        <dd class="mono" th:text="${application.defaultBranch}">main</dd>
+        <dt>Registered</dt>
+        <dd th:text="${@fmt.time(application.createdAt)}">time</dd>
+        <dt>Last updated</dt>
+        <dd th:text="${@fmt.time(application.updatedAt)}">time</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2>Add environment</h2>
+      <form class="stacked" th:action="@{/applications/{id}/environments(id=${application.id})}"
+            th:object="${environmentForm}" method="post">
+        <label for="env-name">Name</label>
+        <input type="text" id="env-name" th:field="*{name}" list="env-names" placeholder="dev" required>
+        <datalist id="env-names"><option value="dev"></option><option value="prod"></option></datalist>
+        <label for="env-url">Public URL <span class="hint">(ALB DNS name, used for health checks)</span></label>
+        <input type="url" id="env-url" th:field="*{url}" placeholder="http://my-alb-123.eu-central-1.elb.amazonaws.com">
+        <div class="form-actions"><button type="submit" class="btn">Create environment</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card table-wrap">
+    <h2>Environments</h2>
+    <p th:if="${#lists.isEmpty(environments)}" class="muted">No environments yet. Create <code>dev</code> and <code>prod</code> to start deploying.</p>
+    <table th:unless="${#lists.isEmpty(environments)}">
+      <thead>
+      <tr><th>Environment</th><th>Status</th><th>Health</th><th>Current version</th><th>URL</th></tr>
+      </thead>
+      <tbody>
+      <tr th:each="env : ${environments}">
+        <td><a th:href="@{/environments/{id}(id=${env.id})}" th:text="${env.name}">dev</a></td>
+        <td><span class="badge" th:classappend="'badge-' + ${env.status}" th:text="${env.status}">ACTIVE</span></td>
+        <td><span class="badge" th:classappend="'badge-' + ${env.healthStatus}" th:text="${env.healthStatus}">HEALTHY</span></td>
+        <td class="mono" th:text="${env.currentVersion} ?: '—'">v1</td>
+        <td class="mono" th:text="${env.url} ?: '—'">url</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Applications')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav('applications')}"></header>
+<main class="container">
+  <div th:replace="~{fragments/layout :: flash}"></div>
+  <div class="page-header">
+    <div>
+      <h1>Applications</h1>
+      <p class="muted">Services registered with the control center and their environments.</p>
+    </div>
+    <a class="btn" th:href="@{/applications/new}">Register application</a>
+  </div>
+
+  <div th:if="${#lists.isEmpty(applications)}" class="card empty">
+    <p>No applications registered yet.</p>
+    <a class="btn" th:href="@{/applications/new}">Register your first application</a>
+  </div>
+
+  <div th:unless="${#lists.isEmpty(applications)}" class="card table-wrap">
+    <table>
+      <thead>
+      <tr><th>Name</th><th>Repository</th><th>Branch</th><th>Environments</th><th>Registered</th></tr>
+      </thead>
+      <tbody>
+      <tr th:each="app : ${applications}">
+        <td><a th:href="@{/applications/{id}(id=${app.id})}" th:text="${app.name}">name</a></td>
+        <td><a class="mono" th:href="${app.repositoryUrl}" th:text="${app.repositoryUrl}" target="_blank" rel="noopener">repo</a></td>
+        <td class="mono" th:text="${app.defaultBranch}">main</td>
+        <td>
+          <span th:each="env : ${environmentsByApplication.get(app.id)}">
+            <a th:href="@{/environments/{id}(id=${env.id})}" class="badge" th:classappend="'badge-' + ${env.status}"
+               th:text="${env.name}">dev</a>
+          </span>
+          <span th:if="${environmentsByApplication.get(app.id) == null}" class="muted">none</span>
+        </td>
+        <td th:text="${@fmt.time(app.createdAt)}">time</td>
+      </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
