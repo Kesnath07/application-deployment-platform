@@ -49,6 +49,34 @@
       </form>
     </div>
   </div>
+
+  <div class="card">
+    <h2>New deployment</h2>
+    <form class="stacked" th:action="@{/environments/{id}/deployments(id=${environment.id})}"
+          th:object="${deploymentForm}" method="post">
+      <div class="grid grid-2">
+        <div>
+          <label for="imageTag">Image tag</label>
+          <input type="text" id="imageTag" th:field="*{imageTag}" class="mono" placeholder="Full Git commit SHA" required>
+          <p class="hint">Immutable ECR tag (the commit SHA). <code>latest</code> is rejected.</p>
+        </div>
+        <div>
+          <label for="version">Version label <span class="hint">(optional)</span></label>
+          <input type="text" id="version" th:field="*{version}" placeholder="Defaults to the short SHA">
+        </div>
+      </div>
+      <label for="message">Change description <span class="hint">(optional)</span></label>
+      <textarea id="message" th:field="*{message}" placeholder="What is being released?"></textarea>
+      <div class="form-actions">
+        <button type="submit" class="btn">Deploy to <span th:text="${environment.name}">env</span></button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Deployment history</h2>
+    <div th:replace="~{fragments/deployments :: table(${deployments}, false)}"></div>
+  </div>
 </main>
 <footer th:replace="~{fragments/layout :: footer}"></footer>
 </body>

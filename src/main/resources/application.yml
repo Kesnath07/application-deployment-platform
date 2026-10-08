@@ -60,6 +60,10 @@ control-center:
     interval: ${HEALTH_CHECK_INTERVAL:PT60S}
     timeout: PT3S
     path: /api/health
+  github:
+    enabled: ${GITHUB_DISPATCH_ENABLED:false}
+    token: ${GITHUB_TOKEN:}
+    workflow-file: ${GITHUB_WORKFLOW_FILE:deploy.yml}
 
 logging:
   level:
