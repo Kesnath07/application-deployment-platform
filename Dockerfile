@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -q package -DskipTests \
 # ---------------------------------------------------------------------------
 # Stage 2: minimal JRE runtime, running as an unprivileged user.
 # ---------------------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 
 LABEL org.opencontainers.image.title="cloud-deployment-control-center" \
       org.opencontainers.image.description="Internal developer platform for ECS Fargate deployments"
