@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{fragments/layout :: head(${application.name})}"></head>
+<head th:replace="~{fragments/layout :: head(${app.name})}"></head>
 <body>
 <header th:replace="~{fragments/layout :: nav('applications')}"></header>
 <main class="container">
   <div th:replace="~{fragments/layout :: flash}"></div>
-  <div class="breadcrumb"><a th:href="@{/applications}">Applications</a> / <span th:text="${application.name}">app</span></div>
+  <div class="breadcrumb"><a th:href="@{/applications}">Applications</a> / <span th:text="${app.name}">app</span></div>
   <div class="page-header">
     <div>
-      <h1 th:text="${application.name}">app</h1>
-      <p class="muted" th:text="${application.description} ?: 'No description'">description</p>
+      <h1 th:text="${app.name}">app</h1>
+      <p class="muted" th:text="${app.description} ?: 'No description'">description</p>
     </div>
   </div>
 
@@ -18,19 +18,19 @@
       <h2>Details</h2>
       <dl class="details">
         <dt>Repository</dt>
-        <dd><a class="mono" th:href="${application.repositoryUrl}" th:text="${application.repositoryUrl}" target="_blank" rel="noopener">repo</a></dd>
+        <dd><a class="mono" th:href="${app.repositoryUrl}" th:text="${app.repositoryUrl}" target="_blank" rel="noopener">repo</a></dd>
         <dt>Default branch</dt>
-        <dd class="mono" th:text="${application.defaultBranch}">main</dd>
+        <dd class="mono" th:text="${app.defaultBranch}">main</dd>
         <dt>Registered</dt>
-        <dd th:text="${@fmt.time(application.createdAt)}">time</dd>
+        <dd th:text="${@fmt.time(app.createdAt)}">time</dd>
         <dt>Last updated</dt>
-        <dd th:text="${@fmt.time(application.updatedAt)}">time</dd>
+        <dd th:text="${@fmt.time(app.updatedAt)}">time</dd>
       </dl>
     </div>
 
     <div class="card">
       <h2>Add environment</h2>
-      <form class="stacked" th:action="@{/applications/{id}/environments(id=${application.id})}"
+      <form class="stacked" th:action="@{/applications/{id}/environments(id=${app.id})}"
             th:object="${environmentForm}" method="post">
         <label for="env-name">Name</label>
         <input type="text" id="env-name" th:field="*{name}" list="env-names" placeholder="dev" required>

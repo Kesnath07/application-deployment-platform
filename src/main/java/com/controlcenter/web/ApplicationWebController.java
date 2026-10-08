@@ -72,7 +72,7 @@ public class ApplicationWebController {
 
     @GetMapping("/{id}")
     public String detail(@PathVariable Long id, Model model) {
-        model.addAttribute("application", applicationService.get(id));
+        model.addAttribute("app", applicationService.get(id));
         model.addAttribute("environments", environmentService.findByApplication(id));
         model.addAttribute("environmentForm", new EnvironmentForm());
         model.addAttribute("recentDeployments", deploymentService.findRecentByApplication(id, RECENT_DEPLOYMENTS));
