@@ -45,3 +45,11 @@ variable "alb_ingress_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+# --- Container registry ------------------------------------------------------
+
+variable "ecr_max_image_count" {
+  description = "Number of images kept in ECR (bounds how far back a rollback can go)."
+  type        = number
+  default     = 30
+}
