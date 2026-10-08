@@ -117,3 +117,11 @@ variable "db_password_version" {
   type        = number
   default     = 1
 }
+
+# --- Monitoring --------------------------------------------------------------
+
+variable "alarm_actions" {
+  description = "Optional notification targets for CloudWatch alarms (e.g. an existing SNS topic ARN)."
+  type        = list(string)
+  default     = []
+}

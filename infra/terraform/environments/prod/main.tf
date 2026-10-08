@@ -109,3 +109,17 @@ module "ecs" {
 
   secrets = local.container_secrets
 }
+
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  name                    = local.name
+  aws_region              = var.aws_region
+  ecs_cluster_name        = module.ecs.cluster_name
+  ecs_service_name        = module.ecs.service_name
+  alb_arn_suffix          = module.alb.arn_suffix
+  target_group_arn_suffix = module.alb.target_group_arn_suffix
+  db_instance_identifier  = module.rds.instance_identifier
+  log_group_name          = module.ecs.log_group_name
+  alarm_actions           = var.alarm_actions
+}
