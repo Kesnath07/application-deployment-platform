@@ -4,8 +4,10 @@ import com.controlcenter.api.dto.DeploymentRequest;
 import com.controlcenter.api.dto.DeploymentResponse;
 import com.controlcenter.api.dto.DeploymentStatusUpdate;
 import com.controlcenter.api.dto.PageResponse;
+import com.controlcenter.api.dto.RollbackRequest;
 import com.controlcenter.domain.DeploymentStatus;
 import com.controlcenter.service.DeploymentService;
+import com.controlcenter.service.RollbackService;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -24,9 +26,11 @@ public class DeploymentController {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final DeploymentService deploymentService;
+    private final RollbackService rollbackService;
 
-    public DeploymentController(DeploymentService deploymentService) {
+    public DeploymentController(DeploymentService deploymentService, RollbackService rollbackService) {
         this.deploymentService = deploymentService;
+        this.rollbackService = rollbackService;
     }
 
     /** Creates a deployment and triggers the GitHub Actions deployment workflow. */
@@ -34,6 +38,19 @@ public class DeploymentController {
     public ResponseEntity<DeploymentResponse> deploy(@PathVariable Long environmentId,
                                                      @Valid @RequestBody DeploymentRequest request) {
         DeploymentResponse created = DeploymentResponse.from(deploymentService.deploy(environmentId, request));
+        return ResponseEntity.created(URI.create("/api/deployments/" + created.id())).body(created);
+    }
+
+    /**
+     * Redeploys a previously successful image. Without a body the environment returns to
+     * its previous successful version.
+     */
+    @PostMapping("/api/environments/{environmentId}/rollback")
+    public ResponseEntity<DeploymentResponse> rollback(@PathVariable Long environmentId,
+                                                       @Valid @RequestBody(required = false) RollbackRequest request) {
+        RollbackRequest effective = request == null ? new RollbackRequest(null, null) : request;
+        DeploymentResponse created = DeploymentResponse.from(
+                rollbackService.rollback(environmentId, effective.targetDeploymentId(), effective.reason()));
         return ResponseEntity.created(URI.create("/api/deployments/" + created.id())).body(created);
     }
 

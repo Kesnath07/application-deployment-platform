@@ -60,6 +60,11 @@
       </tbody>
     </table>
   </div>
+
+  <div class="card">
+    <h2>Recent deployments</h2>
+    <div th:replace="~{fragments/deployments :: table(${recentDeployments}, true, null)}"></div>
+  </div>
 </main>
 <footer th:replace="~{fragments/layout :: footer}"></footer>
 </body>

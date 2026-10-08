@@ -17,6 +17,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -59,6 +60,10 @@ public class DeploymentService {
         return status == null
                 ? deployments.findAllByOrderByCreatedAtDescIdDesc(pageable)
                 : deployments.findByStatusOrderByCreatedAtDescIdDesc(status, pageable);
+    }
+
+    public List<Deployment> findRecentByApplication(Long applicationId, int limit) {
+        return deployments.findByApplicationIdOrderByCreatedAtDescIdDesc(applicationId, PageRequest.of(0, limit));
     }
 
     public List<Deployment> findByEnvironment(Long environmentId) {
@@ -124,13 +129,28 @@ public class DeploymentService {
             deployment.transitionTo(target, message, Instant.now(clock));
             switch (target) {
                 case RUNNING -> environment.deploymentStarted();
-                case SUCCESS -> environment.deploymentSucceeded(deployment.getVersion());
+                case SUCCESS -> {
+                    environment.deploymentSucceeded(deployment.getVersion());
+                    if (deployment.isRollback()) {
+                        markReplacedDeploymentRolledBack(deployment);
+                    }
+                }
                 case FAILED -> environment.deploymentFailed();
                 default -> { }
             }
             log.info("Deployment id={} environment={} moved to {}", deploymentId, environment.getName(), target);
         });
         return readOnly.execute(status -> get(deploymentId));
+    }
+
+    /** The deployment that was live before a successful rollback is flagged as rolled back. */
+    private void markReplacedDeploymentRolledBack(Deployment rollback) {
+        deployments.findByEnvironmentIdAndStatusOrderByCompletedAtDescIdDesc(
+                        rollback.getEnvironment().getId(), DeploymentStatus.SUCCESS).stream()
+                .filter(previous -> !previous.getId().equals(rollback.getId()))
+                .findFirst()
+                .ifPresent(previous -> previous.transitionTo(DeploymentStatus.ROLLED_BACK,
+                        "Rolled back by deployment #" + rollback.getId(), Instant.now(clock)));
     }
 
     private Deployment appendMessage(Long deploymentId, String note) {
