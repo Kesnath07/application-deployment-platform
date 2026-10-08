@@ -21,8 +21,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -q package -DskipTests \
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
 LABEL org.opencontainers.image.title="cloud-deployment-control-center" \
-      org.opencontainers.image.description="Internal developer platform for ECS Fargate deployments" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.description="Internal developer platform for ECS Fargate deployments"
 
 RUN addgroup -S -g 10001 app && adduser -S -D -H -u 10001 -G app app
 
