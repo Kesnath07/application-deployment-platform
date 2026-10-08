@@ -72,6 +72,11 @@ module "iam" {
   log_group_arn          = module.ecs.log_group_arn
   secret_arns            = local.secret_arns
   enable_execute_command = var.enable_execute_command
+
+  github_repository           = var.github_repository
+  github_environment          = var.environment
+  create_github_oidc_provider = var.create_github_oidc_provider
+  ecs_service_arn             = module.ecs.service_arn
 }
 
 module "ecs" {

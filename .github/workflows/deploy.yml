@@ -1,0 +1,281 @@
+name: Deploy
+
+# Builds, pushes and deploys the control center to ECS Fargate.
+#
+#   push to main       -> test, build and deploy the commit to dev
+#   workflow_dispatch  -> deploy to dev or prod; started manually or by the control
+#                         center dashboard (which passes deployment_id)
+#
+# Images are tagged with the immutable Git commit SHA. When the requested image
+# already exists in ECR (promotion or rollback), the build is skipped and the
+# existing image is redeployed; otherwise the tag is checked out as a Git ref
+# (commit SHA or Git tag) and built.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "infra/**"
+      - ".checkov.yaml"
+      - ".github/dependabot.yml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+        required: true
+      image_tag:
+        description: Image tag to deploy, normally a full commit SHA (defaults to the selected branch head)
+        type: string
+        required: false
+      deployment_id:
+        description: Control center deployment id to report the result to
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # One deployment per environment at a time; never cancel a rollout in progress.
+  group: deploy-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      explicit_tag: ${{ steps.resolve.outputs.explicit_tag }}
+    steps:
+      - name: Resolve environment and image tag
+        id: resolve
+        env:
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          INPUT_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          INPUT_DEPLOYMENT_ID: ${{ github.event.inputs.deployment_id }}
+        run: |
+          environment="${INPUT_ENVIRONMENT:-dev}"
+          image_tag="${INPUT_IMAGE_TAG:-$GITHUB_SHA}"
+          explicit_tag=$([ -n "$INPUT_IMAGE_TAG" ] && echo true || echo false)
+          # Docker tag syntax; 'latest' is rejected because deployments must be immutable.
+          if ! [[ "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || [ "$image_tag" = "latest" ]; then
+            echo "::error::image_tag must be an immutable Docker tag (e.g. a commit SHA), got '$image_tag'"
+            exit 1
+          fi
+          if [ -n "$INPUT_DEPLOYMENT_ID" ] && ! [[ "$INPUT_DEPLOYMENT_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::deployment_id must be numeric"
+            exit 1
+          fi
+          {
+            echo "environment=$environment"
+            echo "image_tag=$image_tag"
+            echo "explicit_tag=$explicit_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "### Deploying \`${image_tag}\` to **${environment}**" >> "$GITHUB_STEP_SUMMARY"
+
+  check-image:
+    name: Check for existing image
+    needs: resolve
+    if: needs.resolve.outputs.explicit_tag == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ needs.resolve.outputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      exists: ${{ steps.lookup.outputs.exists }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-check-${{ github.run_id }}
+
+      - name: Look up image in ECR
+        id: lookup
+        env:
+          IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+               --image-ids imageTag="$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "Image $IMAGE_TAG already exists: skipping build"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Test, build and push image
+    needs: [resolve, check-image]
+    # Runs for pushes and for dispatches of commits that have no image yet.
+    if: >-
+      !cancelled() && needs.resolve.result == 'success'
+      && needs.check-image.result != 'failure'
+      && needs.check-image.outputs.exists != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: ${{ needs.resolve.outputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.image_tag }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Tests run before any AWS credentials exist in the job.
+      - name: Run tests
+        run: ./mvnw -B -ntp test
+
+      - name: Build application
+        run: ./mvnw -B -ntp package -DskipTests
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          tags: control-center:${{ needs.resolve.outputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-build-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push immutable image
+        env:
+          LOCAL_IMAGE: control-center:${{ needs.resolve.outputs.image_tag }}
+          REMOTE_IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ needs.resolve.outputs.image_tag }}
+        run: |
+          docker tag "$LOCAL_IMAGE" "$REMOTE_IMAGE"
+          docker push "$REMOTE_IMAGE"
+          echo "Pushed \`$REMOTE_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to ECS
+    needs: [resolve, check-image, build]
+    if: >-
+      !cancelled() && needs.resolve.result == 'success'
+      && needs.check-image.result != 'failure'
+      && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+      url: ${{ vars.APP_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-deploy-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Terraform owns the task definition (CPU, memory, roles, secrets, env vars);
+      # the pipeline only swaps the image of the latest revision.
+      - name: Download current task definition
+        env:
+          TASK_FAMILY: ${{ vars.ECS_TASK_DEFINITION }}
+        run: |
+          aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
+            --query taskDefinition > task-definition.json
+
+      - name: Render task definition with new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ vars.ECS_CONTAINER_NAME }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ needs.resolve.outputs.image_tag }}
+          environment-variables: |
+            APP_VERSION=${{ needs.resolve.outputs.image_tag }}
+
+      - name: Deploy to ECS and wait for service stability
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE }}
+          wait-for-service-stability: true
+          wait-for-minutes: 20
+
+      - name: Verify deployed version
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          for attempt in $(seq 1 12); do
+            version=$(curl -fsS --max-time 5 "$APP_URL/api/health" | jq -r '.version' || true)
+            if [ "$version" = "$IMAGE_TAG" ]; then
+              echo "Health check passed: $APP_URL is serving $version"
+              echo "Verified \`$version\` at $APP_URL" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Attempt $attempt: serving '${version:-unreachable}', expected $IMAGE_TAG"
+            sleep 10
+          done
+          echo "::error::Deployment verification failed"
+          exit 1
+
+  report:
+    name: Report deployment result
+    needs: [resolve, check-image, build, deploy]
+    if: always() && github.event.inputs.deployment_id != '' && vars.CONTROL_CENTER_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send status to the control center
+        env:
+          CONTROL_CENTER_URL: ${{ vars.CONTROL_CENTER_URL }}
+          DEPLOYMENT_ID: ${{ github.event.inputs.deployment_id }}
+          RESULT: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$RESULT" = "success" ]; then status=SUCCESS; else status=FAILED; fi
+          payload=$(jq -n --arg status "$status" --arg message "GitHub Actions run $RUN_URL finished: $RESULT" \
+            '{status: $status, message: $message}')
+          curl -fsS --retry 3 --retry-delay 5 -X POST \
+            -H 'Content-Type: application/json' -d "$payload" \
+            "$CONTROL_CENTER_URL/api/deployments/$DEPLOYMENT_ID/status"

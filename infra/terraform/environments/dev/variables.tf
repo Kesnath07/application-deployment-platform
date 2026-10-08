@@ -26,6 +26,12 @@ variable "github_repository" {
   }
 }
 
+variable "create_github_oidc_provider" {
+  description = "Create the account-wide GitHub OIDC provider. Set to false when another environment in the same AWS account already created it."
+  type        = bool
+  default     = true
+}
+
 # --- Networking --------------------------------------------------------------
 
 variable "vpc_cidr" {
