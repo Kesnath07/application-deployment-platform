@@ -1,7 +1,7 @@
 name: CI
 
-# Pull request validation for the application: unit/integration tests, packaging,
-# Dockerfile lint, image build and an end-to-end container smoke test.
+# Pull request validation: workflow lint, warning-free compilation, unit/integration tests,
+# packaging, Dockerfile lint, image build and an end-to-end container smoke test.
 on:
   pull_request:
     branches: [main]
@@ -15,6 +15,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # A pinned release binary verified by checksum instead of a third-party action.
+      # shellcheck is preinstalled on GitHub-hosted Ubuntu runners, so actionlint also
+      # checks every run: script.
+      - name: Install actionlint
+        run: |
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+
+      - name: Lint workflows
+        run: '"$RUNNER_TEMP/actionlint" -color'
+
   test:
     name: Java tests and build
     runs-on: ubuntu-latest
@@ -30,6 +55,8 @@ jobs:
           java-version: "21"
           cache: maven
 
+      # verify = enforcer (JDK/Maven versions) -> compile with -Werror -> tests -> package.
+      # The wrapper checks the Maven distribution against distributionSha256Sum.
       - name: Run tests and package
         run: ./mvnw -B -ntp verify
 
