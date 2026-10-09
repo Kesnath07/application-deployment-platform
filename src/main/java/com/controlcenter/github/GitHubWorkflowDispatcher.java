@@ -30,6 +30,10 @@ public class GitHubWorkflowDispatcher implements WorkflowDispatcher {
 
     public GitHubWorkflowDispatcher(GitHubProperties properties, RestClient.Builder restClientBuilder) {
         this.properties = properties;
+        if (properties.enabled() && !properties.isConfigured()) {
+            log.warn("GITHUB_DISPATCH_ENABLED is true but GITHUB_TOKEN is empty: deployments will be recorded "
+                    + "but no workflow will be dispatched");
+        }
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(properties.timeout()).build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(properties.timeout());
@@ -44,7 +48,9 @@ public class GitHubWorkflowDispatcher implements WorkflowDispatcher {
     @Override
     public DispatchResult dispatch(WorkflowDispatchRequest request) {
         if (!properties.isConfigured()) {
-            return DispatchResult.skipped("GitHub dispatch is disabled: run the '%s' workflow manually and report "
+            String reason = properties.enabled() ? "GitHub dispatch is enabled but no GITHUB_TOKEN is configured"
+                    : "GitHub dispatch is disabled";
+            return DispatchResult.skipped(reason + ": run the '%s' workflow manually and report "
                     .formatted(properties.workflowFile()) + "the result via POST /api/deployments/"
                     + request.deploymentId() + "/status");
         }

@@ -58,7 +58,7 @@ control-center:
   health-check:
     enabled: ${HEALTH_CHECK_ENABLED:true}
     interval: ${HEALTH_CHECK_INTERVAL:PT60S}
-    timeout: PT3S
+    timeout: ${HEALTH_CHECK_TIMEOUT:PT3S}
     path: /api/health
   github:
     enabled: ${GITHUB_DISPATCH_ENABLED:false}

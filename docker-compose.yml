@@ -36,16 +36,28 @@ services:
       DB_SSL_MODE: disable
       APP_ENVIRONMENT: local
       APP_VERSION: local
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
       HEALTH_CHECK_ENABLED: ${HEALTH_CHECK_ENABLED:-true}
+      HEALTH_CHECK_INTERVAL: ${HEALTH_CHECK_INTERVAL:-PT60S}
+      HEALTH_CHECK_TIMEOUT: ${HEALTH_CHECK_TIMEOUT:-PT3S}
       GITHUB_DISPATCH_ENABLED: ${GITHUB_DISPATCH_ENABLED:-false}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     ports:
       - "127.0.0.1:8080:8080"
+    # Same hardening as the ECS task: read-only root filesystem with a writable /tmp,
+    # no Linux capabilities (the app binds an unprivileged port as UID 10001).
     read_only: true
     tmpfs:
       - /tmp
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
+    # Mirror the Fargate task: 1 GiB memory, from which the JVM sizes its heap
+    # (MaxRAMPercentage=75), and ECS's 30 s stop timeout. Docker's default of 10 s would
+    # kill the app during its 20 s graceful shutdown.
+    mem_limit: 1g
+    stop_grace_period: 30s
     restart: unless-stopped
 
 volumes:

@@ -49,13 +49,18 @@ class GitHubWorkflowDispatcherTest {
         DispatchResult result = dispatcher(false, "test-token").dispatch(REQUEST);
 
         assertThat(result.outcome()).isEqualTo(DispatchResult.Outcome.SKIPPED);
-        assertThat(result.message()).contains("/api/deployments/42/status");
+        assertThat(result.message()).startsWith("GitHub dispatch is disabled: ")
+                .contains("/api/deployments/42/status");
         assertThat(github.requests()).isEmpty();
     }
 
     @Test
     void skipsWhenTokenIsMissing() {
-        assertThat(dispatcher(true, "").dispatch(REQUEST).outcome()).isEqualTo(DispatchResult.Outcome.SKIPPED);
+        DispatchResult result = dispatcher(true, "").dispatch(REQUEST);
+
+        assertThat(result.outcome()).isEqualTo(DispatchResult.Outcome.SKIPPED);
+        assertThat(result.message()).startsWith("GitHub dispatch is enabled but no GITHUB_TOKEN is configured: ");
+        assertThat(github.requests()).isEmpty();
     }
 
     @Test
