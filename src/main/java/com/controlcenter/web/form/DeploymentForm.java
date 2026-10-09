@@ -12,10 +12,11 @@ public class DeploymentForm {
     @Pattern(regexp = ValidationPatterns.IMAGE_TAG, message = ValidationPatterns.IMAGE_TAG_MESSAGE)
     private String imageTag;
 
-    @Size(max = 100)
+    @Size(max = ValidationPatterns.VERSION_MAX_LENGTH)
+    @Pattern(regexp = ValidationPatterns.VERSION, message = ValidationPatterns.VERSION_MESSAGE)
     private String version;
 
-    @Size(max = 1000)
+    @Size(max = ValidationPatterns.MESSAGE_MAX_LENGTH)
     private String message;
 
     public DeploymentRequest toRequest() {

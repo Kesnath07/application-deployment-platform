@@ -20,6 +20,14 @@ import com.controlcenter.github.WorkflowDispatchRequest;
 import com.controlcenter.github.WorkflowDispatcher;
 import com.controlcenter.support.DatabaseCleaner;
 import com.controlcenter.support.IntegrationTest;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -128,6 +136,65 @@ class DeploymentServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("valid Docker image tag");
         assertThat(deploymentService.findByEnvironment(environmentId)).isEmpty();
+    }
+
+    @Test
+    void rejectsInvalidVersionLabelsAndDescriptions() {
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId,
+                new DeploymentRequest(SHA, "1.0.0\nforged log line", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Version label must not contain line breaks or other control characters");
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "v".repeat(101), null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Version label must be at most 100 characters");
+        assertThatThrownBy(() -> deploymentService.deploy(environmentId, new DeploymentRequest(SHA, null, "x".repeat(1001))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Change description must be at most 1000 characters");
+        assertThat(deploymentService.findByEnvironment(environmentId)).isEmpty();
+        assertThat(environmentService.get(environmentId).getStatus()).isEqualTo(EnvironmentStatus.NOT_DEPLOYED);
+    }
+
+    @Test
+    void acceptsAVersionLabelOfExactlyTheMaximumLength() {
+        Deployment deployment = deploymentService.deploy(environmentId,
+                new DeploymentRequest(SHA, "  " + "v".repeat(100) + "  ", null));
+
+        assertThat(deployment.getVersion()).hasSize(100);
+    }
+
+    @Test
+    void startsOnlyOneOfTwoConcurrentDeploymentsToTheSameEnvironment() throws Exception {
+        CountDownLatch go = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<Deployment>> attempts = new ArrayList<>();
+            for (String imageTag : List.of("aaaaaaaaaaaa", "bbbbbbbbbbbb")) {
+                attempts.add(pool.submit(() -> {
+                    go.await();
+                    return deploymentService.deploy(environmentId, new DeploymentRequest(imageTag, null, null));
+                }));
+            }
+            go.countDown();
+
+            int started = 0;
+            int rejected = 0;
+            for (Future<Deployment> attempt : attempts) {
+                try {
+                    attempt.get(30, TimeUnit.SECONDS);
+                    started++;
+                } catch (ExecutionException ex) {
+                    assertThat(ex.getCause()).isInstanceOf(ConflictException.class)
+                            .hasMessageContaining("already has a deployment in progress");
+                    rejected++;
+                }
+            }
+
+            assertThat(started).isEqualTo(1);
+            assertThat(rejected).isEqualTo(1);
+            assertThat(deploymentService.findByEnvironment(environmentId)).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

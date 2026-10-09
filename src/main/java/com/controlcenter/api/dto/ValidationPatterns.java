@@ -24,6 +24,12 @@ public final class ValidationPatterns {
     public static final String IMAGE_TAG = "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$";
     public static final String IMAGE_TAG_MESSAGE = "must be a valid Docker image tag (e.g. a Git commit SHA)";
 
+    /** Version labels are shown inline and quoted in the newline-separated pipeline log. */
+    public static final String VERSION = "^[^\\p{Cntrl}]*$";
+    public static final String VERSION_MESSAGE = "must not contain line breaks or other control characters";
+    public static final int VERSION_MAX_LENGTH = 100;
+    public static final int MESSAGE_MAX_LENGTH = 1000;
+
     private ValidationPatterns() {
     }
 }

@@ -91,8 +91,8 @@ public class DeploymentService {
     public Deployment deploy(Long environmentId, DeploymentRequest request) {
         String imageTag = requireValidImageTag(request.imageTag());
         String version = (request.version() == null || request.version().isBlank())
-                ? shorten(imageTag) : request.version().trim();
-        String message = (request.message() == null || request.message().isBlank()) ? null : request.message().trim();
+                ? shorten(imageTag) : requireValidVersion(request.version().trim());
+        String message = requireValidMessage(request.message());
         Long deploymentId = transactions.execute(status ->
                 startDeployment(environmentId, version, imageTag, false, message).getId());
         return dispatch(deploymentId);
@@ -101,10 +101,12 @@ public class DeploymentService {
     /**
      * Creates the deployment row and marks the environment as deploying. Must run inside a
      * transaction. Only one deployment per environment may be in progress at a time, and the
-     * image that is already live cannot be deployed again.
+     * image that is already live cannot be deployed again. The environment row stays locked until
+     * the transaction commits, so two concurrent requests cannot both pass these checks.
      */
     Deployment startDeployment(Long environmentId, String version, String imageTag, boolean rollback, String message) {
-        Environment environment = requireEnvironment(environmentId);
+        Environment environment = environments.findForUpdateById(environmentId)
+                .orElseThrow(() -> new NotFoundException("Environment", environmentId));
         if (deployments.existsByEnvironmentIdAndStatusIn(environmentId, DeploymentStatus.IN_PROGRESS)) {
             throw new ConflictException("Environment '%s' already has a deployment in progress"
                     .formatted(environment.getName()));
@@ -198,6 +200,30 @@ public class DeploymentService {
         }
         if ("latest".equalsIgnoreCase(trimmed)) {
             throw new IllegalArgumentException("Mutable tag 'latest' is not allowed; deploy an immutable image tag");
+        }
+        return trimmed;
+    }
+
+    /** Mirrors the request validation for callers that bypass it, so bad input is a 400 rather than a SQL error. */
+    private static String requireValidVersion(String version) {
+        if (version.length() > ValidationPatterns.VERSION_MAX_LENGTH) {
+            throw new IllegalArgumentException("Version label must be at most %d characters"
+                    .formatted(ValidationPatterns.VERSION_MAX_LENGTH));
+        }
+        if (!version.matches(ValidationPatterns.VERSION)) {
+            throw new IllegalArgumentException("Version label " + ValidationPatterns.VERSION_MESSAGE);
+        }
+        return version;
+    }
+
+    private static String requireValidMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        String trimmed = message.trim();
+        if (trimmed.length() > ValidationPatterns.MESSAGE_MAX_LENGTH) {
+            throw new IllegalArgumentException("Change description must be at most %d characters"
+                    .formatted(ValidationPatterns.MESSAGE_MAX_LENGTH));
         }
         return trimmed;
     }

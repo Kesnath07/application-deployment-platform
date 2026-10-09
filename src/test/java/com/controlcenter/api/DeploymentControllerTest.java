@@ -57,6 +57,15 @@ class DeploymentControllerTest {
     }
 
     @Test
+    void rejectsMultiLineVersionLabel() throws Exception {
+        mvc.perform(post("/api/environments/3/deployments").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"imageTag\": \"abc123def456\", \"version\": \"1.0.0\\nSUCCESS\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]")
+                        .value("version: must not contain line breaks or other control characters"));
+    }
+
+    @Test
     void acceptsPipelineStatusCallback() throws Exception {
         Deployment deployment = deployment(10L, "abc123def456", false);
         deployment.transitionTo(DeploymentStatus.SUCCESS, "service stable", Instant.now());

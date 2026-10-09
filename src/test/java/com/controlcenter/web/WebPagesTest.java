@@ -191,6 +191,9 @@ class WebPagesTest {
         mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "latest"))
                 .andExpect(redirectedUrl(environmentUrl))
                 .andExpect(flash().attribute("error", containsString("'latest' is not allowed")));
+        mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "cccccccccccc").param("version", "3.0\r\n"))
+                .andExpect(redirectedUrl(environmentUrl))
+                .andExpect(flash().attribute("error", containsString("version must not contain line breaks")));
         mvc.perform(post(environmentUrl + "/deployments").param("imageTag", "bbbbbbbbbbbb"))
                 .andExpect(redirectedUrl(environmentUrl))
                 .andExpect(flash().attribute("error", containsString("already live")));
