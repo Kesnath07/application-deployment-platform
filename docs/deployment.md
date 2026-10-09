@@ -103,10 +103,12 @@ from that exact commit. Later redeploys reuse the image.
 ## Rolling back
 
 - **Dashboard:** *Environment → Roll back to &lt;version&gt;*, or *Roll back to this* on any earlier successful deployment.
-- **API:** `POST /api/environments/{id}/rollback` with optional `{"targetDeploymentId": 12, "reason": "..."}`.
+- **API:** `POST /api/environments/{id}/rollback` with optional `{"targetDeploymentId": 12, "reason": "..."}`. Ineligible targets are rejected with the reason; see [operations.md](operations.md#rollback-behaviour).
 - **GitHub only:** *Run workflow* with the previous SHA as `image_tag`. The build is skipped because the image is in ECR.
 
 When newly started tasks never become healthy, ECS also rolls back on its own (deployment circuit breaker).
+
+For health checks, stuck deployments and other day-2 topics see [operations.md](operations.md).
 
 ## Rotating the database password
 

@@ -8,8 +8,20 @@ Three GitHub Actions workflows cover validation and delivery. None of them store
 
 | Job | Steps |
 |---|---|
+| Workflow lint | Download a pinned actionlint release, verify its SHA-256, lint every workflow (shellcheck checks the `run:` scripts) |
 | Java tests and build | Checkout → Java 21 (Temurin, Maven cache) → `./mvnw verify` → upload Surefire reports on failure |
 | Docker build and smoke test | hadolint → Buildx build (GitHub Actions cache) → `docker compose up --wait` with PostgreSQL → `GET /api/health`, `POST /api/applications`, render the dashboard → logs on failure → teardown |
+
+`./mvnw verify` runs, in order:
+
+- **Maven Enforcer**: JDK 21+, Maven 3.9+, no duplicate dependency declarations
+- **Compilation with warnings as errors** (`-Xlint:all`, except `this-escape`, which JPA entities cannot avoid), for main and test code
+- **Tests**: unit, MockMvc, JPA (against the Flyway schema on H2) and a real-server test for container-level API errors
+- **Packaging** of the layered jar
+
+The Maven wrapper pins the Maven distribution with `distributionSha256Sum`, so CI and the deploy
+workflow refuse a modified download. The same Flyway migrations run against PostgreSQL 16 in the
+Docker smoke test.
 
 ### `terraform.yml`: infrastructure validation
 
@@ -49,7 +61,7 @@ Details:
 - **Stability.** `amazon-ecs-deploy-task-definition` waits for the service to reach a steady state (up to 20 minutes). The ECS circuit breaker rolls back tasks that never become healthy.
 - **Verification.** Polls `APP_URL/api/health` until the reported `version` equals the deployed tag.
 - **Concurrency.** One run per environment (`deploy-<env>`). A rollout in progress is never cancelled.
-- **Reporting.** If the run carries a `deployment_id` and `CONTROL_CENTER_URL` is set, the final job posts `SUCCESS` or `FAILED` with a link to the run.
+- **Reporting.** If the run carries a `deployment_id` and `CONTROL_CENTER_URL` is set, the final job posts `SUCCESS` or `FAILED` with a link to the run. It uses `curl --retry`; the control center acknowledges a repeated final report with `200`, so a retry after a lost response does not fail the job.
 
 ## OIDC authentication
 
@@ -84,16 +96,19 @@ fork, on a pull request, or in another environment cannot assume the role. Jobs 
 
 - [ ] Environments `dev` and `prod` exist, with the variables from `terraform output github_environment_variables`
 - [ ] `prod` requires reviewers and only allows deployments from `main`
-- [ ] Branch protection on `main` requires the `CI` and `Terraform` checks
+- [ ] Branch protection on `main` requires the `CI` checks (Workflow lint, Java tests and build, Docker build and smoke test) and the `Terraform` checks
 - [ ] Optional: the repository variable `CONTROL_CENTER_URL` for status callbacks
 - [ ] Dependabot alerts and security updates are enabled (`.github/dependabot.yml`)
 
 ## Running the checks locally
 
 ```bash
-./mvnw verify
-docker build -t control-center:local .
+./mvnw verify                                   # needs JDK 21+
+actionlint                                      # uses shellcheck when installed
 hadolint Dockerfile
-actionlint
 terraform fmt -check -recursive infra/terraform
+docker build -t control-center:local .          # needs Docker
 ```
+
+`terraform validate` works without AWS credentials after `terraform init -backend=false`.
+`terraform plan` and `apply` need AWS credentials and are never run by CI.

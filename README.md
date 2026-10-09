@@ -19,6 +19,7 @@ The control center deploys itself with the same pipeline it drives for other app
 - [Architecture](#architecture)
 - [Technology stack](#technology-stack)
 - [Local setup](#local-setup)
+- [What needs external setup](#what-needs-external-setup)
 - [Docker](#docker)
 - [Terraform](#terraform)
 - [AWS architecture](#aws-architecture)
@@ -27,6 +28,7 @@ The control center deploys itself with the same pipeline it drives for other app
 - [Rollback](#rollback)
 - [Security](#security)
 - [Monitoring](#monitoring)
+- [Health checks](#health-checks)
 - [REST API](#rest-api)
 - [Project structure](#project-structure)
 - [Further documentation](#further-documentation)
@@ -38,13 +40,13 @@ The control center deploys itself with the same pipeline it drives for other app
 | Register and view applications | An application is one GitHub repository that produces one container image |
 | Manage environments | `dev`, `prod` (or any name) per application, each with its own status, health and current version |
 | Create deployments | Pick an immutable image tag (commit SHA); the platform records it and dispatches the GitHub Actions deploy workflow |
-| Track deployment status | `PENDING → RUNNING → SUCCESS / FAILED`, reported back by the pipeline through a callback API |
+| Track deployment status | `PENDING → RUNNING → SUCCESS / FAILED`, reported back by the pipeline through a callback API. Concurrent reports are serialized and a retried final report is acknowledged without changes |
 | Deployment history | Per environment, per application, and a global history page you can filter and page through |
-| Rollback | One click redeploys the previous successful image. The replaced deployment becomes `ROLLED_BACK` |
-| Basic health | Scheduled HTTP probes of each environment's `/api/health` through its load balancer |
-| Operational state | Each environment is shown as `HEALTHY`, `DEPLOYING`, `DEGRADED`, `DOWN`, … with its last deployment and failure reason |
+| Rollback | One click redeploys the previous successful image. The replaced deployment becomes `ROLLED_BACK`. Ineligible targets are rejected with the reason |
+| Basic health | Scheduled HTTP probes of each environment's `/api/health` through its load balancer, with the failure reason (HTTP status, timeout, refused connection) |
+| Operational state | Each environment is shown as `HEALTHY`, `DEPLOYING`, `DEGRADED`, `DOWN`, … with its last deployment and failure reason. The dashboard lists environments that need attention |
 
-Screens: dashboard (KPIs, environment overview, recent deployments), applications, application
+Screens: dashboard (KPIs, environments needing attention, environment overview, recent deployments), applications, application
 detail, environment detail (operational state, deploy form, history, rollback), deployment detail
 (pipeline log, failure reason).
 
@@ -90,7 +92,7 @@ GitHub Actions → ECR → ECS pipeline. See [docs/architecture.md](docs/archite
 | Infrastructure as Code | Terraform ≥ 1.11, AWS provider 6.x, S3 remote state with native locking |
 | AWS | VPC, ALB, ECS Fargate, ECR, RDS PostgreSQL, IAM, Secrets Manager, CloudWatch |
 | CI/CD | GitHub Actions with OIDC federation to AWS IAM |
-| Quality gates | JUnit 5 / MockMvc (69 tests), hadolint, `terraform validate`, Checkov, actionlint-clean workflows |
+| Quality gates | JUnit 5 unit, MockMvc, JPA and real-server integration tests; javac warnings as errors; Maven Enforcer; actionlint + shellcheck; hadolint; `terraform validate`; Checkov |
 
 ## Local setup
 
@@ -106,9 +108,11 @@ curl http://localhost:8080/api/health
 Run the tests (in-memory H2 in PostgreSQL mode, so no external services are needed):
 
 ```bash
-./mvnw test        # unit, slice and integration tests
-./mvnw package     # builds target/control-center.jar
+./mvnw verify      # enforcer, warning-free compile, all tests, target/control-center.jar
+./mvnw test        # tests only
 ```
+
+The build needs JDK 21 or newer and Maven 3.9+ (the wrapper downloads a checksum-verified Maven).
 
 Run against your own PostgreSQL without Docker:
 
@@ -122,18 +126,30 @@ DB_HOST=localhost DB_PASSWORD=... ./mvnw spring-boot:run
 | `DB_USERNAME`, `DB_PASSWORD` | `controlcenter`, empty | Credentials (Secrets Manager in AWS) |
 | `DB_SSL_MODE` | `prefer` | `require` in AWS (RDS enforces TLS) |
 | `APP_VERSION`, `APP_ENVIRONMENT` | `local` | Reported by `/api/health`; set by the pipeline |
+| `APP_LOG_LEVEL` | `INFO` | Log level of the application's packages |
 | `HEALTH_CHECK_ENABLED` | `true` | Background probes of environment URLs |
+| `HEALTH_CHECK_INTERVAL`, `HEALTH_CHECK_TIMEOUT` | `PT60S`, `PT3S` | Probe interval and timeout; invalid values stop startup |
 | `GITHUB_DISPATCH_ENABLED`, `GITHUB_TOKEN` | `false`, empty | Trigger GitHub Actions from the dashboard |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | unset | `ecs` in AWS for JSON logs |
 
 Without a GitHub token the platform still records deployments. You run the workflow yourself
 and report the result with the status API or the buttons on the deployment page.
+All variables are listed in [docs/operations.md](docs/operations.md#configuration-reference).
+
+## What needs external setup
+
+| Works locally with no cloud account | Needs external setup |
+|---|---|
+| Applications, environments, deployment records and history, rollback records, dashboard, REST API | Triggering GitHub Actions from the dashboard: a GitHub token |
+| Health probes of any reachable URL | Automatic status callbacks: `CONTROL_CENTER_URL` reachable from GitHub runners |
+| Manual status reporting (API or dashboard buttons) | Building, pushing and deploying images: AWS account, applied Terraform, GitHub environments with the OIDC role |
+| All tests, `terraform fmt` / `validate`, Checkov, hadolint, actionlint | `terraform plan` / `apply`, CloudWatch: AWS credentials |
 
 ## Docker
 
 - **Multi-stage build.** A Maven + JDK 21 build stage, then an `eclipse-temurin:21-jre-alpine` runtime.
 - **Layered jar.** Dependencies, loader, snapshot dependencies and application classes are separate image layers, so code-only changes rebuild one small layer.
-- **Runs as non-root** (UID 10001). Application files are root-owned and read-only for the app user. In ECS the root filesystem is read-only too, and only `/tmp` is writable.
+- **Runs as non-root** (UID 10001). Application files are root-owned and read-only for the app user. In ECS and Docker Compose the root filesystem is read-only too, and only `/tmp` is writable.
 - **No secrets in the image.** All configuration comes from environment variables.
 - **Health check** against `/api/health`, which the ALB and the ECS container health check also use.
 - **JVM sized to the container**: `-XX:MaxRAMPercentage=75`.
@@ -141,6 +157,10 @@ and report the result with the status API or the buttons on the deployment page.
 ```bash
 docker build -t control-center:dev .
 ```
+
+The Compose stack mirrors the Fargate task: 1 GiB memory limit, all Linux capabilities dropped,
+`no-new-privileges`, and a 30 s stop timeout so the 20 s graceful shutdown can finish.
+Ports are bound to `127.0.0.1` only.
 
 ## Terraform
 
@@ -203,7 +223,7 @@ tier's security group rather than a CIDR range. RDS sits in subnets with no inte
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| [`ci.yml`](.github/workflows/ci.yml) | Pull requests | Maven tests and package, hadolint, Docker build, container smoke test with `docker compose` |
+| [`ci.yml`](.github/workflows/ci.yml) | Pull requests | actionlint, Maven verify (enforcer, `-Werror` compile, tests, package), hadolint, Docker build, container smoke test with `docker compose` |
 | [`terraform.yml`](.github/workflows/terraform.yml) | Changes under `infra/` | `terraform fmt -check`, `terraform validate` per environment, Checkov scan |
 | [`deploy.yml`](.github/workflows/deploy.yml) | Push to `main`, manual run, dashboard | Test, build, push to ECR, deploy to ECS, verify, report back |
 
@@ -246,6 +266,13 @@ A rollback is an ordinary deployment of an image that is already in ECR:
 3. The workflow finds the image in ECR, **skips the build** and only updates the ECS service.
 4. When the rollback succeeds, the deployment it replaced is marked `ROLLED_BACK`. If it fails, the live version stays untouched.
 
+Safeguards: the target must be a successful deployment of the same environment whose image is
+not the live one, and no other deployment may be in progress. Otherwise the request is rejected
+with the reason (`404` unknown environment or target, `400` target from another environment,
+`409` ineligible target or deployment in progress). History is append-only: the restored
+deployment is never modified. The *Roll back to &lt;version&gt;* button always restores the
+version it shows. Details: [docs/operations.md](docs/operations.md#rollback-behaviour).
+
 ECS adds a second safety net. The **deployment circuit breaker** automatically returns the service
 to the last working task definition when new tasks never become healthy.
 
@@ -259,6 +286,7 @@ to the last working task definition when new tasks never become healthy.
 - **Database credentials** are generated by Terraform as an *ephemeral* value and written through *write-only* arguments to RDS and Secrets Manager. They never appear in Terraform state, the image, the task definition or Git. ECS injects them at container start.
 - **Network isolation.** Private subnets, chained security groups, RDS without public access and with TLS enforced (`rds.force_ssl=1`), and the default security group stripped of all rules.
 - **Hardened containers.** Non-root user, read-only root filesystem, no secrets in the image.
+- **Browser hardening.** `X-Frame-Options: DENY` and `frame-ancestors 'none'` stop other sites from framing the deploy and rollback buttons; `nosniff` and `no-referrer` are set on every response.
 - **Never committed.** `.env`, `*.tfvars`, `backend.hcl`, Terraform state and build output are all git-ignored. Only `*.example` templates are tracked.
 
 The dashboard has no login by design for this MVP. Restrict the ALB with `alb_ingress_cidrs`.
@@ -279,9 +307,20 @@ CloudWatch only:
   | RDS | CPU, free storage |
 
 - **Dashboard:** ECS, ALB, RDS and error-log widgets (Terraform output `cloudwatch_dashboard_url`).
-- **In-app health:** the control center probes each environment's `/api/health` and shows the result.
+- **In-app health:** the control center probes each environment's `/api/health` and shows the result and the failure reason.
 
 Alarm notifications are optional: pass existing SNS topic ARNs as `alarm_actions`.
+
+## Health checks
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | Liveness, version and environment. No database call. Used by the ALB, the ECS and Docker health checks and the deploy workflow's verification |
+| `GET /actuator/health` | Aggregate status including the database (no details exposed) |
+| `GET /actuator/health/liveness`, `/actuator/health/readiness` | Spring Boot availability probes |
+| `GET /actuator/info` | Build metadata |
+
+See [docs/operations.md](docs/operations.md#health-checks) for probe failure details and troubleshooting.
 
 ## REST API
 
@@ -299,11 +338,16 @@ Alarm notifications are optional: pass existing SNS topic ARNs as `alarm_actions
 | `POST` | `/api/environments/{id}/rollback` | Roll back (optional `targetDeploymentId`, `reason`) |
 | `GET` | `/api/deployments?status=&page=&size=` | Paged deployment history |
 | `GET` | `/api/deployments/{id}` | Deployment details |
-| `POST` | `/api/deployments/{id}/status` | Pipeline status callback (`RUNNING`, `SUCCESS`, `FAILED`; anything else is `400`) |
+| `POST` | `/api/deployments/{id}/status` | Pipeline status callback (`RUNNING`, `SUCCESS`, `FAILED`; anything else is `400`). Repeating the final status a deployment already has returns `200` without changes |
 
-Invalid requests get a JSON error: `400` for malformed input (including the `latest` tag), `404` for an
-unknown application, environment or deployment, and `409` when the request conflicts with the current
-state, e.g. a deployment already in progress, the image already live, or an illegal status transition.
+Environment and status responses include `healthDetail`, the reason of the last failed probe.
+
+API errors are JSON with `timestamp`, `status`, `error`, `message`, `path` and `details`:
+`400` for invalid input such as a malformed image tag, the `latest` tag or a multi-line version
+label (field problems are listed in `details`), `404` for an unknown resource or route, `405` and `415` for a wrong
+method or content type, and `409` when the request conflicts with the current state (deployment
+already in progress, image already live, illegal status transition, ineligible rollback target).
+Details: [docs/operations.md](docs/operations.md#api-errors).
 
 ```bash
 curl -X POST localhost:8080/api/environments/1/deployments \
@@ -322,12 +366,12 @@ curl -X POST localhost:8080/api/environments/1/deployments \
 │   ├── domain/         JPA entities and status lifecycles
 │   ├── repository/     Spring Data repositories
 │   ├── github/         GitHub Actions workflow dispatch client
-│   └── config/         typed configuration properties
+│   └── config/         typed, validated configuration properties; security headers
 ├── src/main/resources/ application.yml, Flyway migrations, templates, CSS
 ├── src/test/           unit, MockMvc, JPA and integration tests
 ├── infra/terraform/    modules + dev/prod environments
 ├── .github/            CI, Terraform and deploy workflows, Dependabot
-├── docs/               architecture, deployment, infrastructure, CI/CD, security
+├── docs/               architecture, deployment, operations, infrastructure, CI/CD, security
 ├── Dockerfile · docker-compose.yml · .env.example · pom.xml
 ```
 
@@ -337,4 +381,5 @@ curl -X POST localhost:8080/api/environments/1/deployments \
 - [Deployment](docs/deployment.md): first-time AWS setup, deploying, promoting, rolling back
 - [Infrastructure](docs/infrastructure.md): Terraform modules, environments, state, costs
 - [CI/CD](docs/ci-cd.md): workflows, OIDC, GitHub environment configuration
+- [Operations](docs/operations.md): local vs AWS features, configuration, health checks, lifecycle and rollback rules, API errors, troubleshooting
 - [Security](docs/security.md): IAM, secrets, network, accepted risks

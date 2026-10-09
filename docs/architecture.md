@@ -97,7 +97,14 @@ Environment state follows from its deployments:
 | deployment failed (nothing live yet) | `FAILED` | none |
 
 `healthStatus` (`UNKNOWN`, `HEALTHY`, `UNHEALTHY`) is kept separately. It comes from HTTP probes of
-`<environment url>/api/health`.
+`<environment url>/api/health`. For a failed probe, `healthDetail` stores the reason (HTTP status,
+timeout, refused connection, unknown host).
+
+Concurrency: starting a deployment or rollback locks the environment row, and applying a status
+report locks the deployment row (`PESSIMISTIC_WRITE`). This makes "one deployment in progress per
+environment" and "one final status per deployment" hold under concurrent requests. Repeating the
+final status a deployment already has is acknowledged without changes, so the pipeline can retry
+its callback safely.
 
 The UI and `GET /api/environments/{id}/status` combine both into a derived operational state, which is
 never stored:
@@ -126,6 +133,8 @@ never stored:
 | `/api/health` does not query the database | A brief RDS failover does not make ECS replace every task |
 | Server-side rendering | A small, dependency-free UI. The project's focus is infrastructure and delivery |
 | H2 (PostgreSQL mode) for tests, same Flyway migrations | Fast, self-contained test suite. The migrations are portable SQL and are also checked against PostgreSQL 16 |
+| Invariants enforced in the schema as well as in Java | A composite foreign key ties each deployment to its environment's application; check constraints keep lifecycle timestamps, image tags and environment state consistent even for writes that bypass the application |
+| Append-only deployment history | What a deployment targets is mapped `updatable = false`; a rollback is a new row and never edits the restored deployment |
 
 ## Request flow in AWS
 

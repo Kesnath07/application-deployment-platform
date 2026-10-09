@@ -47,13 +47,16 @@ message channels for ECS Exec), and each one is commented in the code.
 - Runs as UID 10001. Application files are root-owned and not writable by the process.
 - ECS runs it with `readonlyRootFilesystem`. Only `/tmp` is writable (an ephemeral task volume).
 - No secrets or environment-specific configuration are baked into the image.
+- Docker Compose applies the same restrictions locally (read-only root filesystem, writable `/tmp` only) and also drops all Linux capabilities and sets `no-new-privileges`.
 - ECR scans on push. `IMMUTABLE` tags stop anyone from replacing a deployed image under the same tag.
 
 ## Application
 
 - Input is validated at the edges: names, GitHub URLs, Docker tag syntax, with `latest` rejected.
 - Status changes follow a strict state machine, so replayed or out-of-order callbacks cannot corrupt history.
-- Errors return structured JSON without stack traces (`server.error.include-stacktrace=never`).
+- Errors return structured JSON without stack traces (`server.error.include-stacktrace=never`). Type and constraint errors are reported by field and accepted values rather than Java types or SQL, and `500` responses never include exception text.
+- Every response carries `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'` (no clickjacking of the deploy and rollback buttons), `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+- Concurrent requests cannot start two deployments in one environment or apply two final statuses to one deployment (row locks), and the schema rejects inconsistent rows.
 - `open-in-view` is disabled, and so is Actuator exposure beyond `health` and `info`.
 
 ## Accepted risks and next steps
@@ -68,3 +71,9 @@ message channels for ECS Exec), and each one is commented in the code.
 | No WAF | Restricted ingress CIDRs | AWS WAF managed rule groups on the ALB |
 
 Checkov runs in CI. Every suppressed check is listed in `.checkov.yaml` with the reasoning above.
+
+## Supply chain
+
+- Images are tagged with immutable commit SHAs; ECR rejects overwrites.
+- The Maven wrapper verifies the Maven distribution's SHA-256; CI downloads actionlint as a pinned, checksum-verified release instead of using a third-party action.
+- Dependabot proposes updates for Maven, Docker base images, GitHub Actions and Terraform providers. Compiler warnings fail the build, so deprecations introduced by an upgrade surface in its pull request.
