@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -116,6 +117,54 @@ class DeploymentControllerTest {
                         .content("{\"message\": \"done\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details[0]").value(startsWith("status")));
+    }
+
+    @Test
+    void namesTheFieldAndAllowedValuesForAnUnknownStatus() throws Exception {
+        mvc.perform(post("/api/deployments/10/status").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"DONE\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Request validation failed"))
+                .andExpect(jsonPath("$.details[0]")
+                        .value("status: must be one of PENDING, RUNNING, SUCCESS, FAILED, ROLLED_BACK"));
+    }
+
+    @Test
+    void namesTheFieldForANonNumericTarget() throws Exception {
+        mvc.perform(post("/api/environments/3/rollback").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetDeploymentId\": \"latest\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]").value("targetDeploymentId: must be a whole number"));
+    }
+
+    @Test
+    void reportsAMissingBody() throws Exception {
+        mvc.perform(post("/api/environments/3/deployments").contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Request body is missing"));
+    }
+
+    @Test
+    void explainsInvalidQueryAndPathParameters() throws Exception {
+        mvc.perform(get("/api/deployments").param("status", "DONE"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Parameter 'status' must be one of PENDING, RUNNING, SUCCESS, FAILED, ROLLED_BACK"));
+        mvc.perform(get("/api/deployments/abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Parameter 'id' must be a whole number"));
+        mvc.perform(get("/api/deployments").param("page", "first"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Parameter 'page' must be a whole number"));
+    }
+
+    @Test
+    void hidesInternalsOfUnexpectedErrors() throws Exception {
+        when(deploymentService.get(10L)).thenThrow(new IllegalStateException("connection to db-host:5432 refused"));
+
+        mvc.perform(get("/api/deployments/10"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("Unexpected server error"));
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.controlcenter.domain.Application;
 import com.controlcenter.service.ApplicationService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -62,6 +63,19 @@ class ApplicationControllerTest {
                         """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("already exists"));
+    }
+
+    @Test
+    void returnsConflictWhenAConcurrentRequestWonTheUniqueConstraint() throws Exception {
+        when(applicationService.register(any())).thenThrow(new DataIntegrityViolationException(
+                "could not execute statement", new RuntimeException("duplicate key value violates uq_applications_name")));
+
+        mvc.perform(post("/api/applications").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"name": "billing", "repositoryUrl": "https://github.com/acme/billing"}
+                        """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("The request conflicts with existing data; reload and try again"))
+                .andExpect(jsonPath("$.details.length()").value(0));
     }
 
     @Test
