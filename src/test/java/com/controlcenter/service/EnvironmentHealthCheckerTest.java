@@ -63,6 +63,8 @@ class EnvironmentHealthCheckerTest {
         workload.respondWith(503, "");
 
         assertThat(healthChecker.check(environment)).isEqualTo(HealthStatus.UNHEALTHY);
+        assertThat(environmentService.get(environment.getId()).getHealthDetail())
+                .isEqualTo("HTTP 503 Service Unavailable");
     }
 
     @Test
@@ -71,6 +73,36 @@ class EnvironmentHealthCheckerTest {
                 new EnvironmentRequest("prod", "http://127.0.0.1:1"));
 
         assertThat(healthChecker.check(environment)).isEqualTo(HealthStatus.UNHEALTHY);
+        assertThat(environmentService.get(environment.getId()).getHealthDetail()).isEqualTo("Connection refused");
+    }
+
+    @Test
+    void clearsTheFailureDetailOnceTheEndpointRecovers() {
+        Environment environment = environmentService.create(applicationId,
+                new EnvironmentRequest("prod", workload.baseUrl()));
+        workload.respondWith(500, "");
+        healthChecker.checkAll();
+        assertThat(environmentService.get(environment.getId()).getHealthDetail())
+                .isEqualTo("HTTP 500 Internal Server Error");
+
+        workload.respondWith(204, "");
+        healthChecker.checkAll();
+
+        Environment recovered = environmentService.get(environment.getId());
+        assertThat(recovered.getHealthStatus()).isEqualTo(HealthStatus.HEALTHY);
+        assertThat(recovered.getHealthDetail()).isNull();
+    }
+
+    @Test
+    void forgetsTheFailureDetailWhenTheUrlChanges() {
+        Environment environment = environmentService.create(applicationId,
+                new EnvironmentRequest("prod", "http://127.0.0.1:1"));
+        healthChecker.check(environment);
+
+        Environment updated = environmentService.updateUrl(environment.getId(), workload.baseUrl());
+
+        assertThat(updated.getHealthStatus()).isEqualTo(HealthStatus.UNKNOWN);
+        assertThat(updated.getHealthDetail()).isNull();
     }
 
     @Test

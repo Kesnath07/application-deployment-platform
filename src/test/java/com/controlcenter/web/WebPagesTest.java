@@ -1,6 +1,7 @@
 package com.controlcenter.web;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -15,6 +16,7 @@ import com.controlcenter.api.dto.DeploymentRequest;
 import com.controlcenter.api.dto.EnvironmentRequest;
 import com.controlcenter.domain.Deployment;
 import com.controlcenter.domain.DeploymentStatus;
+import com.controlcenter.domain.HealthStatus;
 import com.controlcenter.service.ApplicationService;
 import com.controlcenter.service.DeploymentService;
 import com.controlcenter.service.EnvironmentService;
@@ -108,12 +110,35 @@ class WebPagesTest {
                 .andExpect(content().string(containsString("ECS service did not stabilize")))
                 .andExpect(content().string(containsString("is still serving traffic")));
         mvc.perform(get("/"))
-                .andExpect(content().string(containsString("1</span> need attention")));
+                .andExpect(content().string(containsString("1</span> need attention")))
+                .andExpect(content().string(containsString("Needs attention")))
+                .andExpect(content().string(containsString("storefront / prod")));
         mvc.perform(get("/applications/" + applicationId))
                 .andExpect(content().string(containsString(">DEGRADED<")));
         mvc.perform(get("/deployments/" + failed.getId()))
                 .andExpect(content().string(containsString("This deployment failed")))
                 .andExpect(content().string(containsString("ECS service did not stabilize")));
+    }
+
+    @Test
+    void explainsAFailingHealthCheckOnEnvironmentAndDashboard() throws Exception {
+        environmentService.recordHealth(environmentId, HealthStatus.UNHEALTHY, "HTTP 502 Bad Gateway");
+
+        mvc.perform(get("/environments/" + environmentId))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(">DOWN<")))
+                .andExpect(content().string(containsString("Health check failing.")))
+                .andExpect(content().string(containsString("HTTP 502 Bad Gateway")));
+        mvc.perform(get("/"))
+                .andExpect(content().string(containsString("Needs attention")))
+                .andExpect(content().string(containsString("Health check failing: HTTP 502 Bad Gateway")));
+    }
+
+    @Test
+    void omitsTheAttentionPanelWhenEverythingIsFine() throws Exception {
+        mvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("Needs attention"))));
     }
 
     @Test

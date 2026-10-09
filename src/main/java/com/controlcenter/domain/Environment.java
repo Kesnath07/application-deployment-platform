@@ -23,6 +23,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Table(name = "environments")
 public class Environment {
 
+    public static final int HEALTH_DETAIL_LIMIT = 255;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -52,6 +54,10 @@ public class Environment {
     @Column(name = "last_health_check_at")
     private Instant lastHealthCheckAt;
 
+    /** Why the most recent probe failed, e.g. "HTTP 503" or "Connection timed out"; null otherwise. */
+    @Column(name = "last_health_detail", length = HEALTH_DETAIL_LIMIT)
+    private String healthDetail;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -73,6 +79,7 @@ public class Environment {
         this.url = url;
         this.healthStatus = HealthStatus.UNKNOWN;
         this.lastHealthCheckAt = null;
+        this.healthDetail = null;
     }
 
     public void deploymentStarted() {
@@ -93,8 +100,15 @@ public class Environment {
     }
 
     public void recordHealth(HealthStatus healthStatus, Instant checkedAt) {
+        recordHealth(healthStatus, null, checkedAt);
+    }
+
+    /** Stores a probe result; the detail is kept only for failed probes and capped to the column size. */
+    public void recordHealth(HealthStatus healthStatus, String detail, Instant checkedAt) {
         this.healthStatus = healthStatus;
         this.lastHealthCheckAt = checkedAt;
+        this.healthDetail = healthStatus != HealthStatus.UNHEALTHY || detail == null || detail.isBlank() ? null
+                : detail.length() <= HEALTH_DETAIL_LIMIT ? detail : detail.substring(0, HEALTH_DETAIL_LIMIT - 1) + "…";
     }
 
     public Long getId() {
@@ -127,6 +141,10 @@ public class Environment {
 
     public Instant getLastHealthCheckAt() {
         return lastHealthCheckAt;
+    }
+
+    public String getHealthDetail() {
+        return healthDetail;
     }
 
     public Instant getCreatedAt() {

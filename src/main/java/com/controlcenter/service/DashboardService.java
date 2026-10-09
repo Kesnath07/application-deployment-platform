@@ -42,23 +42,27 @@ public class DashboardService {
         Integer successRate = finished == 0 ? null : (int) Math.round(successful * 100.0 / finished);
         long unhealthy = allEnvironments.stream()
                 .filter(overview -> overview.environment().getHealthStatus() == HealthStatus.UNHEALTHY).count();
-        long needsAttention = allEnvironments.stream().filter(overview -> overview.state().needsAttention()).count();
+        List<EnvironmentOverview> needsAttention = allEnvironments.stream()
+                .filter(overview -> overview.state().needsAttention()).toList();
         List<Deployment> recent = deployments
                 .findAllByOrderByCreatedAtDescIdDesc(PageRequest.of(0, RECENT_DEPLOYMENTS)).getContent();
 
         return new DashboardSummary(applications.count(), allEnvironments.size(),
-                environments.countByStatus(EnvironmentStatus.ACTIVE), unhealthy, needsAttention, deployments.count(),
-                inProgress, failed, successRate, allEnvironments, recent);
+                environments.countByStatus(EnvironmentStatus.ACTIVE), unhealthy, needsAttention.size(),
+                deployments.count(), inProgress, failed, successRate, allEnvironments, needsAttention, recent);
     }
 
     /**
      * @param successRate percentage of finished deployments that succeeded (rolled-back
      *                    deployments count as successful rollouts); null when none finished yet
      * @param attentionEnvironmentCount environments that are failed, down or degraded
+     * @param attentionEnvironments     those environments, in the same order as {@code environments}
      */
     public record DashboardSummary(long applicationCount, long environmentCount, long activeEnvironmentCount,
                                    long unhealthyEnvironmentCount, long attentionEnvironmentCount,
                                    long deploymentCount, long inProgressCount, long failedCount, Integer successRate,
-                                   List<EnvironmentOverview> environments, List<Deployment> recentDeployments) {
+                                   List<EnvironmentOverview> environments,
+                                   List<EnvironmentOverview> attentionEnvironments,
+                                   List<Deployment> recentDeployments) {
     }
 }

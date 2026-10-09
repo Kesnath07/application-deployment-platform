@@ -4,9 +4,14 @@ import com.controlcenter.config.HealthCheckProperties;
 import com.controlcenter.domain.Environment;
 import com.controlcenter.domain.HealthStatus;
 import com.controlcenter.repository.EnvironmentRepository;
+import java.net.ConnectException;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
+import java.net.http.HttpTimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -46,29 +51,60 @@ public class EnvironmentHealthChecker {
     public void checkAll() {
         // Load targets in a short read; HTTP calls happen outside of any transaction.
         for (Environment environment : environments.findByUrlIsNotNull()) {
-            environmentService.recordHealth(environment.getId(), probe(environment.getUrl()));
+            ProbeResult result = probe(environment.getUrl());
+            environmentService.recordHealth(environment.getId(), result.status(), result.detail());
         }
     }
 
     public HealthStatus check(Environment environment) {
-        HealthStatus status = environment.getUrl() == null ? HealthStatus.UNKNOWN : probe(environment.getUrl());
-        environmentService.recordHealth(environment.getId(), status);
-        return status;
+        ProbeResult result = environment.getUrl() == null
+                ? new ProbeResult(HealthStatus.UNKNOWN, null) : probe(environment.getUrl());
+        environmentService.recordHealth(environment.getId(), result.status(), result.detail());
+        return result.status();
     }
 
-    HealthStatus probe(String baseUrl) {
+    ProbeResult probe(String baseUrl) {
         String target = baseUrl + properties.path();
         try {
-            boolean healthy = restClient.get().uri(target)
+            HttpStatusCode status = restClient.get().uri(target)
                     .retrieve()
-                    .onStatus(status -> true, (request, response) -> { })
+                    .onStatus(code -> true, (request, response) -> { })
                     .toBodilessEntity()
-                    .getStatusCode()
-                    .is2xxSuccessful();
-            return healthy ? HealthStatus.HEALTHY : HealthStatus.UNHEALTHY;
+                    .getStatusCode();
+            if (status.is2xxSuccessful()) {
+                return new ProbeResult(HealthStatus.HEALTHY, null);
+            }
+            HttpStatus known = HttpStatus.resolve(status.value());
+            String detail = "HTTP " + status.value() + (known == null ? "" : " " + known.getReasonPhrase());
+            log.warn("Health probe to {} returned {}", target, detail);
+            return new ProbeResult(HealthStatus.UNHEALTHY, detail);
         } catch (Exception ex) {
             log.warn("Health probe to {} failed: {}", target, ex.getMessage());
-            return HealthStatus.UNHEALTHY;
+            return new ProbeResult(HealthStatus.UNHEALTHY, describe(ex));
         }
+    }
+
+    /** Turns a transport failure into a short reason an operator can act on. */
+    private String describe(Exception ex) {
+        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+            if (cause instanceof HttpTimeoutException) {
+                return "No response within " + properties.timeout().toMillis() + " ms";
+            }
+            if (cause instanceof ConnectException) {
+                return "Connection refused";
+            }
+            if (cause instanceof UnknownHostException) {
+                return "Unknown host " + cause.getMessage();
+            }
+        }
+        Throwable root = ex;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        return "Request failed: " + (root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage());
+    }
+
+    /** Outcome of one probe; {@code detail} explains a failure and is null for healthy endpoints. */
+    record ProbeResult(HealthStatus status, String detail) {
     }
 }

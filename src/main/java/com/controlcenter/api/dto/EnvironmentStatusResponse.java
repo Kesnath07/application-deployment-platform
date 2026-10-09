@@ -11,12 +11,13 @@ import java.time.Instant;
 
 /**
  * Operational status of one environment: the derived state, the raw deployment and health
- * status it is based on, and the deployments that explain it.
+ * status it is based on, and the deployments that explain it. {@code healthDetail} says why the
+ * last health probe failed and {@code failureReason} why the latest deployment failed.
  */
 public record EnvironmentStatusResponse(Long environmentId, String environmentName, Long applicationId,
                                         String applicationName, OperationalState state, String stateDescription,
                                         EnvironmentStatus deploymentStatus, HealthStatus healthStatus,
-                                        Instant lastHealthCheckAt, String currentVersion,
+                                        Instant lastHealthCheckAt, String healthDetail, String currentVersion,
                                         DeploymentSummary liveDeployment, DeploymentSummary latestDeployment,
                                         String failureReason) {
 
@@ -25,7 +26,8 @@ public record EnvironmentStatusResponse(Long environmentId, String environmentNa
         return new EnvironmentStatusResponse(environment.getId(), environment.getName(),
                 environment.getApplication().getId(), environment.getApplication().getName(),
                 overview.state(), overview.state().getDescription(), environment.getStatus(),
-                environment.getHealthStatus(), environment.getLastHealthCheckAt(), environment.getCurrentVersion(),
+                environment.getHealthStatus(), environment.getLastHealthCheckAt(), environment.getHealthDetail(),
+                environment.getCurrentVersion(),
                 DeploymentSummary.from(overview.liveDeployment()), DeploymentSummary.from(overview.latestDeployment()),
                 overview.failureReason());
     }

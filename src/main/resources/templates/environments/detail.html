@@ -23,6 +23,7 @@
     <strong>Health check failing.</strong>
     The last probe of <span class="mono" th:text="${environment.url}">url</span> at
     <span th:text="${@fmt.time(environment.lastHealthCheckAt)}">time</span> did not return a successful response.
+    <span class="callout-detail mono" th:if="${environment.healthDetail}" th:text="${environment.healthDetail}">reason</span>
   </div>
   <div class="callout callout-danger" th:if="${overview.latestDeployment != null and overview.latestDeployment.status.name() == 'FAILED'}"
        th:with="failed=${overview.latestDeployment}">
@@ -66,7 +67,10 @@
         <dt>Deployment status</dt>
         <dd th:text="${environment.status}">ACTIVE</dd>
         <dt>Health</dt>
-        <dd th:text="${environment.healthStatus}">HEALTHY</dd>
+        <dd>
+          <span th:text="${environment.healthStatus}">HEALTHY</span>
+          <span class="hint mono" th:if="${environment.healthDetail}" th:text="${environment.healthDetail}">reason</span>
+        </dd>
         <dt>Last health check</dt>
         <dd th:text="${@fmt.time(environment.lastHealthCheckAt)}">time</dd>
         <dt>URL</dt>

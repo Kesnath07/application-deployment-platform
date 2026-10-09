@@ -38,6 +38,20 @@
     </div>
   </div>
 
+  <div class="card card-attention" th:unless="${#lists.isEmpty(summary.attentionEnvironments)}">
+    <h2>Needs attention</h2>
+    <ul class="attention-list">
+      <li th:each="overview : ${summary.attentionEnvironments}" th:with="env=${overview.environment}">
+        <span th:replace="~{fragments/status :: state(${overview})}"></span>
+        <a th:href="@{/environments/{id}(id=${env.id})}"
+           th:text="${env.application.name} + ' / ' + ${env.name}">app / env</a>
+        <span class="muted" th:if="${env.currentVersion}">
+          serving <span class="mono" th:text="${env.currentVersion}">v1</span></span>
+        <span class="callout-detail mono" th:text="${overview.attentionReason}">reason</span>
+      </li>
+    </ul>
+  </div>
+
   <div class="card table-wrap">
     <h2>Environments</h2>
     <p th:if="${#lists.isEmpty(summary.environments)}" class="muted">
@@ -54,7 +68,8 @@
         <td><span th:replace="~{fragments/status :: state(${overview})}"></span></td>
         <td class="mono" th:text="${env.currentVersion} ?: '—'">v1</td>
         <td><span th:replace="~{fragments/status :: deployment(${overview.latestDeployment})}"></span></td>
-        <td><span class="badge" th:classappend="'badge-' + ${env.healthStatus}" th:text="${env.healthStatus}">HEALTHY</span></td>
+        <td><span class="badge" th:classappend="'badge-' + ${env.healthStatus}" th:text="${env.healthStatus}"
+                  th:title="${env.healthDetail}">HEALTHY</span></td>
         <td th:text="${@fmt.time(env.lastHealthCheckAt)}">time</td>
       </tr>
       </tbody>

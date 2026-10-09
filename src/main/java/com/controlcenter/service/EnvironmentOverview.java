@@ -26,4 +26,14 @@ public record EnvironmentOverview(Environment environment, Deployment latestDepl
     public boolean isDeploymentInProgress() {
         return latestDeployment != null && latestDeployment.isInProgress();
     }
+
+    /** Why the environment needs attention (failed probe or failed deployment); null when it does not. */
+    public String getAttentionReason() {
+        return switch (state) {
+            case DOWN -> environment.getHealthDetail() == null
+                    ? "Health check failing" : "Health check failing: " + environment.getHealthDetail();
+            case FAILED, DEGRADED -> failureReason == null ? "Latest deployment failed" : failureReason;
+            default -> null;
+        };
+    }
 }

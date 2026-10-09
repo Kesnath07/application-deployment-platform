@@ -69,8 +69,9 @@ public class EnvironmentService {
     }
 
     @Transactional
-    public void recordHealth(Long id, HealthStatus status) {
-        environments.findById(id).ifPresent(environment -> environment.recordHealth(status, Instant.now(clock)));
+    public void recordHealth(Long id, HealthStatus status, String detail) {
+        environments.findById(id)
+                .ifPresent(environment -> environment.recordHealth(status, detail, Instant.now(clock)));
     }
 
     private static String normalizeUrl(String url) {

@@ -83,6 +83,22 @@ class EnvironmentControllerTest {
     }
 
     @Test
+    void explainsWhyAnEnvironmentIsDown() throws Exception {
+        Environment prod = environment(5L, "prod");
+        Deployment live = deployment(prod, 20L, "1.0.0", DeploymentStatus.SUCCESS, null);
+        prod.deploymentSucceeded("1.0.0");
+        prod.recordHealth(HealthStatus.UNHEALTHY, "No response within 3000 ms", NOW);
+        when(overviewService.forEnvironment(5L)).thenReturn(EnvironmentOverview.of(prod, live, live));
+
+        mvc.perform(get("/api/environments/5/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("DOWN"))
+                .andExpect(jsonPath("$.healthStatus").value("UNHEALTHY"))
+                .andExpect(jsonPath("$.healthDetail").value("No response within 3000 ms"))
+                .andExpect(jsonPath("$.failureReason").doesNotExist());
+    }
+
+    @Test
     void returnsNotFoundForUnknownEnvironment() throws Exception {
         when(overviewService.forEnvironment(99L)).thenThrow(new NotFoundException("Environment", 99L));
 
