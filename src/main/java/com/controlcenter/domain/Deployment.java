@@ -29,25 +29,27 @@ public class Deployment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // What was deployed where never changes after creation; history rows are only ever appended.
+    // The schema also requires application_id to match the environment's application.
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "application_id", nullable = false)
+    @JoinColumn(name = "application_id", nullable = false, updatable = false)
     private Application application;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "environment_id", nullable = false)
+    @JoinColumn(name = "environment_id", nullable = false, updatable = false)
     private Environment environment;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, updatable = false, length = 100)
     private String version;
 
-    @Column(name = "image_tag", nullable = false, length = 128)
+    @Column(name = "image_tag", nullable = false, updatable = false, length = 128)
     private String imageTag;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private DeploymentStatus status = DeploymentStatus.PENDING;
 
-    @Column(name = "is_rollback", nullable = false)
+    @Column(name = "is_rollback", nullable = false, updatable = false)
     private boolean rollback;
 
     @Column(length = 1000)

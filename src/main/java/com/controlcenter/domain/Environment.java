@@ -30,10 +30,10 @@ public class Environment {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "application_id", nullable = false)
+    @JoinColumn(name = "application_id", nullable = false, updatable = false)
     private Application application;
 
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, updatable = false, length = 30)
     private String name;
 
     /** Base URL of the running workload, used for health probes (optional). */

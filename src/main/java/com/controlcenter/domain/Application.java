@@ -19,7 +19,8 @@ public class Application {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    /** Stable identifier; it cannot be changed after registration. */
+    @Column(nullable = false, unique = true, updatable = false, length = 100)
     private String name;
 
     @Column(length = 1000)
