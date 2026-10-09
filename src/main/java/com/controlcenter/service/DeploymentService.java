@@ -133,7 +133,15 @@ public class DeploymentService {
                     deployment.getApplication().getDefaultBranch(), deployment.getEnvironment().getName(),
                     deployment.getImageTag(), deployment.getId());
         });
-        DispatchResult result = dispatcher.dispatch(request);
+        DispatchResult result;
+        try {
+            result = dispatcher.dispatch(request);
+        } catch (RuntimeException ex) {
+            // The deployment row is already committed; never leave it PENDING, because that would
+            // block every further deployment and rollback of the environment.
+            log.error("Workflow dispatch for deployment id={} failed unexpectedly", deploymentId, ex);
+            result = DispatchResult.failed("Workflow dispatch failed unexpectedly: " + ex.getMessage());
+        }
         return switch (result.outcome()) {
             case DISPATCHED -> updateStatus(deploymentId, DeploymentStatus.RUNNING, result.message());
             case FAILED -> updateStatus(deploymentId, DeploymentStatus.FAILED, result.message());
@@ -143,7 +151,9 @@ public class DeploymentService {
 
     /**
      * Applies a status transition reported by the pipeline and keeps the environment's
-     * status and current version consistent with it.
+     * status and current version consistent with it. The deployment row is locked, so racing
+     * callbacks are applied one after the other. Repeating the final status a deployment already
+     * has (a retried SUCCESS or FAILED callback) is acknowledged without changing anything.
      */
     public Deployment updateStatus(Long deploymentId, DeploymentStatus target, String message) {
         if (!REPORTABLE_STATUSES.contains(target)) {
@@ -151,7 +161,12 @@ public class DeploymentService {
                     + "(ROLLED_BACK is set automatically when a rollback succeeds)").formatted(target));
         }
         transactions.executeWithoutResult(status -> {
-            Deployment deployment = get(deploymentId);
+            Deployment deployment = deployments.findForUpdateById(deploymentId)
+                    .orElseThrow(() -> new NotFoundException("Deployment", deploymentId));
+            if (target.isTerminal() && deployment.getStatus() == target) {
+                log.info("Deployment id={} is already {}; ignoring repeated report", deploymentId, target);
+                return;
+            }
             Environment environment = deployment.getEnvironment();
             deployment.transitionTo(target, message, Instant.now(clock));
             switch (target) {

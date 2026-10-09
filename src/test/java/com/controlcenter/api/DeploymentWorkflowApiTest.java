@@ -186,6 +186,10 @@ class DeploymentWorkflowApiTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(containsString("cannot move from RUNNING to RUNNING")));
         report(deployment, "SUCCESS", "service stable").andExpect(status().isOk());
+        // curl --retry in the deploy workflow may resend a callback that was already applied.
+        report(deployment, "SUCCESS", "service stable")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
 
         report(deployment, "ROLLED_BACK", null)
                 .andExpect(status().isBadRequest())

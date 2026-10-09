@@ -3,6 +3,7 @@ package com.controlcenter.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -301,6 +302,89 @@ class DeploymentServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("RUNNING to RUNNING");
         assertThat(deploymentService.get(running.getId()).getMessage()).doesNotContain("again");
+    }
+
+    @Test
+    void acknowledgesARepeatedTerminalReportWithoutChangingTheDeployment() {
+        Deployment deployment = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        Deployment done = deploymentService.updateStatus(deployment.getId(), DeploymentStatus.SUCCESS, "service stable");
+
+        Deployment retried = deploymentService.updateStatus(deployment.getId(), DeploymentStatus.SUCCESS, "service stable");
+
+        assertThat(retried.getStatus()).isEqualTo(DeploymentStatus.SUCCESS);
+        assertThat(retried.getCompletedAt()).isEqualTo(done.getCompletedAt());
+        assertThat(retried.getMessage()).isEqualTo(done.getMessage());
+        assertThat(environmentService.get(environmentId).getCurrentVersion()).isEqualTo("1.0.0");
+    }
+
+    @Test
+    void acknowledgesARepeatedFailureReport() {
+        Deployment deployment = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+        deploymentService.updateStatus(deployment.getId(), DeploymentStatus.FAILED, "tasks failed to start");
+
+        Deployment retried = deploymentService.updateStatus(deployment.getId(), DeploymentStatus.FAILED, "retry");
+
+        assertThat(retried.getStatus()).isEqualTo(DeploymentStatus.FAILED);
+        assertThat(retried.getLatestNote()).isEqualTo("tasks failed to start");
+        assertThatThrownBy(() -> deploymentService.updateStatus(deployment.getId(), DeploymentStatus.SUCCESS, null))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void marksDeploymentFailedWhenTheDispatcherThrows() {
+        when(dispatcher.dispatch(any())).thenThrow(new IllegalStateException("connection pool shut down"));
+
+        Deployment deployment = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null));
+
+        assertThat(deployment.getStatus()).isEqualTo(DeploymentStatus.FAILED);
+        assertThat(deployment.getLatestNote())
+                .isEqualTo("Workflow dispatch failed unexpectedly: connection pool shut down");
+        assertThat(environmentService.get(environmentId).getStatus()).isEqualTo(EnvironmentStatus.FAILED);
+
+        doReturn(DispatchResult.dispatched("dispatched")).when(dispatcher).dispatch(any());
+        assertThat(deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null)).getStatus())
+                .isEqualTo(DeploymentStatus.RUNNING);
+    }
+
+    @Test
+    void appliesOnlyOneOfTwoConflictingConcurrentReports() throws Exception {
+        Long deploymentId = deploymentService.deploy(environmentId, new DeploymentRequest(SHA, "1.0.0", null)).getId();
+        CountDownLatch go = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<Deployment>> reports = new ArrayList<>();
+            for (DeploymentStatus reported : List.of(DeploymentStatus.SUCCESS, DeploymentStatus.FAILED)) {
+                reports.add(pool.submit(() -> {
+                    go.await();
+                    return deploymentService.updateStatus(deploymentId, reported, "reported " + reported);
+                }));
+            }
+            go.countDown();
+
+            int applied = 0;
+            for (Future<Deployment> report : reports) {
+                try {
+                    report.get(30, TimeUnit.SECONDS);
+                    applied++;
+                } catch (ExecutionException ex) {
+                    assertThat(ex.getCause()).isInstanceOf(ConflictException.class);
+                }
+            }
+
+            assertThat(applied).isEqualTo(1);
+            Deployment result = deploymentService.get(deploymentId);
+            Environment environment = environmentService.get(environmentId);
+            assertThat(result.getMessage()).containsOnlyOnce("reported ");
+            if (result.getStatus() == DeploymentStatus.SUCCESS) {
+                assertThat(environment.getStatus()).isEqualTo(EnvironmentStatus.ACTIVE);
+                assertThat(environment.getCurrentVersion()).isEqualTo("1.0.0");
+            } else {
+                assertThat(environment.getStatus()).isEqualTo(EnvironmentStatus.FAILED);
+                assertThat(environment.getCurrentVersion()).isNull();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

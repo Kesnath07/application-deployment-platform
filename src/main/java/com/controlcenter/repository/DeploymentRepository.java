@@ -2,6 +2,7 @@ package com.controlcenter.repository;
 
 import com.controlcenter.domain.Deployment;
 import com.controlcenter.domain.DeploymentStatus;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -9,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +18,10 @@ public interface DeploymentRepository extends JpaRepository<Deployment, Long> {
 
     @EntityGraph(attributePaths = {"application", "environment"})
     Optional<Deployment> findWithDetailsById(Long id);
+
+    /** Loads the deployment with a row lock so concurrent status reports are applied one at a time. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<Deployment> findForUpdateById(Long id);
 
     @EntityGraph(attributePaths = {"application", "environment"})
     Page<Deployment> findAllByOrderByCreatedAtDescIdDesc(Pageable pageable);
