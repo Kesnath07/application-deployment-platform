@@ -101,8 +101,11 @@
         (image <span class="mono" th:text="${@fmt.shortTag(rollbackTarget.imageTag)}">sha</span>,
         deployment #<span th:text="${rollbackTarget.id}">1</span>).
         The image already exists in ECR, so the pipeline skips the build and only updates the ECS service.</p>
+      <!-- Pins the version shown above, so a deployment that finishes after the page loaded
+           cannot change what this button restores. -->
       <form th:action="@{/environments/{id}/rollback(id=${environment.id})}" method="post"
             th:attr="onsubmit=|return confirm('Roll back ${environment.name} to ${rollbackTarget.version}?')|">
+        <input type="hidden" name="targetDeploymentId" th:value="${rollbackTarget.id}">
         <button type="submit" class="btn btn-warning">Roll back to <span th:text="${rollbackTarget.version}">v0</span></button>
       </form>
     </div>

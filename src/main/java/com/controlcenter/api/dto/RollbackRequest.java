@@ -1,5 +1,6 @@
 package com.controlcenter.api.dto;
 
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -7,5 +8,5 @@ import jakarta.validation.constraints.Size;
  *                           successful version of the environment is used
  * @param reason             optional explanation recorded in the deployment history
  */
-public record RollbackRequest(Long targetDeploymentId, @Size(max = 500) String reason) {
+public record RollbackRequest(@Positive Long targetDeploymentId, @Size(max = 500) String reason) {
 }

@@ -207,14 +207,20 @@ class DeploymentWorkflowApiTest {
 
     @Test
     void rejectsInvalidRollbacks() throws Exception {
+        postJson("/api/environments/999999/rollback", "{}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Environment with id 999999 was not found"));
         postJson("/api/environments/" + prodId + "/rollback", "{}")
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Environment has no successful deployment to roll back from"));
+                .andExpect(jsonPath("$.message").value("Environment 'prod' has no successful deployment to roll back from"));
 
         report(deploy("aaaaaaaaaaaa", "1.0.0").id(), "SUCCESS", null);
         postJson("/api/environments/" + prodId + "/rollback", "{}")
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("No previous successful version is available to roll back to"));
+                .andExpect(jsonPath("$.message").value("No previous successful version is available to roll back to: "
+                        + "every successful deployment of 'prod' runs the live image 'aaaaaaaaaaaa'"));
+        rollbackTo(0).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0]").value(containsString("targetDeploymentId")));
 
         long live = deploy("bbbbbbbbbbbb", "2.0.0").id();
         report(live, "SUCCESS", null);

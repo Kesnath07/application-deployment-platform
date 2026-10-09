@@ -154,6 +154,83 @@ class RollbackServiceTest {
     }
 
     @Test
+    void rejectsRollbackOfAnUnknownEnvironment() {
+        assertThatThrownBy(() -> rollbackService.rollback(999_999L, null, null))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Environment with id 999999 was not found");
+    }
+
+    @Test
+    void namesTheEnvironmentWhenThereIsNothingToRollBackFrom() {
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, null, null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Environment 'prod' has no successful deployment to roll back from");
+    }
+
+    @Test
+    void explainsWhyARequestedTargetIsIneligible() {
+        Deployment v1 = deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        Deployment broken = deploymentService.deploy(environmentId, new DeploymentRequest("bbbbbbbbbbbb", "2.0.0", null));
+        deploymentService.updateStatus(broken.getId(), DeploymentStatus.FAILED, "tasks unhealthy");
+        Deployment v3 = deploySuccessfully("cccccccccccc", "3.0.0");
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, broken.getId(), null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("Deployment #%d is not a valid rollback target: it failed and never went live",
+                        broken.getId());
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, v3.getId(), null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageEndingWith("it is the deployment that is currently live");
+
+        Deployment rollback = rollbackService.rollback(environmentId, v1.getId(), null);
+        deploymentService.updateStatus(rollback.getId(), DeploymentStatus.SUCCESS, null);
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, v3.getId(), null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageEndingWith("it was rolled back; deploy image 'cccccccccccc' again to restore it");
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, v1.getId(), null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageEndingWith("it runs image 'aaaaaaaaaaaa', which is already live");
+    }
+
+    @Test
+    void rejectsAnInProgressDeploymentAsTarget() {
+        deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        Deployment running = deploymentService.deploy(environmentId, new DeploymentRequest("bbbbbbbbbbbb", "2.0.0", null));
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, running.getId(), null))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageEndingWith("it is still in progress");
+    }
+
+    @Test
+    void neverModifiesTheRestoredDeployment() {
+        Deployment v1 = deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        deploySuccessfully("bbbbbbbbbbbb", "2.0.0");
+
+        Deployment rollback = rollbackService.rollback(environmentId, v1.getId(), "incident 42");
+        deploymentService.updateStatus(rollback.getId(), DeploymentStatus.SUCCESS, "service stable");
+
+        Deployment restored = deploymentService.get(v1.getId());
+        assertThat(restored.getStatus()).isEqualTo(DeploymentStatus.SUCCESS);
+        assertThat(restored.getMessage()).isEqualTo(v1.getMessage());
+        assertThat(restored.getCompletedAt()).isEqualTo(v1.getCompletedAt());
+        assertThat(rollback.getMessage()).contains("(deployment #" + v1.getId() + "): incident 42");
+        assertThat(deploymentService.findByEnvironment(environmentId)).hasSize(3);
+    }
+
+    @Test
+    void rejectsAnOverlongReasonBeforeCreatingAnything() {
+        deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
+        deploySuccessfully("bbbbbbbbbbbb", "2.0.0");
+
+        assertThatThrownBy(() -> rollbackService.rollback(environmentId, null, "x".repeat(501)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Rollback reason must be at most 500 characters");
+        assertThat(deploymentService.findByEnvironment(environmentId)).hasSize(2);
+    }
+
+    @Test
     void rejectsUnknownTarget() {
         deploySuccessfully("aaaaaaaaaaaa", "1.0.0");
         deploySuccessfully("bbbbbbbbbbbb", "2.0.0");

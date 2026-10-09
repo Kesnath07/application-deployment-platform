@@ -1,5 +1,6 @@
 package com.controlcenter.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.StringUtils;
 
 /** Renders every server-side page against real data to catch template errors. */
 @IntegrationTest
@@ -83,10 +85,24 @@ class WebPagesTest {
 
     @Test
     void rendersEnvironmentWithRollbackOption() throws Exception {
-        mvc.perform(get("/environments/" + environmentId))
+        Long previousId = deploymentService.findByEnvironment(environmentId).getLast().getId();
+        String pinnedTarget = "name=\"targetDeploymentId\" value=\"" + previousId + "\"";
+
+        String page = mvc.perform(get("/environments/" + environmentId))
                 .andExpect(status().isOk())
                 .andExpect(model().attributeExists("rollbackTarget"))
-                .andExpect(content().string(containsString("Roll back to")));
+                .andExpect(content().string(containsString("Roll back to")))
+                .andReturn().getResponse().getContentAsString();
+
+        // Once on the main rollback button (pinned to the version it names) and once in the history table.
+        assertThat(StringUtils.countOccurrencesOf(page, pinnedTarget)).isEqualTo(2);
+    }
+
+    @Test
+    void showsNotFoundPageWhenRollingBackAnUnknownEnvironment() throws Exception {
+        mvc.perform(post("/environments/999999/rollback"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(containsString("Environment with id 999999 was not found")));
     }
 
     @Test
